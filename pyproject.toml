@@ -1,0 +1,20 @@
+[project]
+name = "dynamodb-table-cloner"
+version = "1.0.0"
+description = "A Python utility that clones DynamoDB tables from cloud to local DynamoDB"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "boto3>=1.28.0",
+    "botocore>=1.31.0",
+]
+
+[project.scripts]
+clone-table = "table_cloner:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = []

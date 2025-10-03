@@ -1,0 +1,6 @@
+{
+  "aws_region": "ap-northeast-1",
+  "local_dynamodb_endpoint": "http://localhost:8000",
+  "local_table_prefix": "local_",
+  "batch_size": 25
+}
