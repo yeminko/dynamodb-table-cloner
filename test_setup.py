@@ -12,6 +12,7 @@ import boto3
 import sys
 from datetime import datetime
 
+
 def check_file_exists(filepath, description):
     """Check if a file exists and report status."""
     if os.path.exists(filepath):
@@ -21,73 +22,59 @@ def check_file_exists(filepath, description):
         print(f"❌ {description}: {filepath} (NOT FOUND)")
         return False
 
-def check_credentials_file():
-    """Check if credentials file is valid."""
-    if not os.path.exists('credentials.json'):
-        return False
-    
-    try:
-        with open('credentials.json', 'r') as f:
-            data = json.load(f)
-            
-        # Check required fields
-        required_fields = ['accessKeyId', 'secretAccessKey', 'sessionToken', 'expiration']
-        creds = data.get('roleCredentials', {})
-        
-        missing_fields = [field for field in required_fields if field not in creds]
-        if missing_fields:
-            print(f"❌ Credentials file missing fields: {missing_fields}")
-            return False
-        
-        # Check expiration
-        expiration = creds.get('expiration', 0)
-        if expiration < datetime.now().timestamp() * 1000:
-            print("⚠️  Warning: Credentials appear to be expired")
-        
-        print("✅ Credentials file format is valid")
-        return True
-        
-    except json.JSONDecodeError:
-        print("❌ Credentials file contains invalid JSON")
-        return False
-    except Exception as e:
-        print(f"❌ Error reading credentials file: {e}")
+
+def check_env_file():
+    """Check if .env file is valid and contains required variables."""
+    if not os.path.exists('.env'):
+        print("❌ .env file not found")
+        print("💡 Please create a .env file based on .env.template")
         return False
 
-def check_config_file():
-    """Check if config file is valid."""
-    if not os.path.exists('config.json'):
-        print("⚠️  Config file not found, will use defaults")
-        return True
-    
     try:
-        with open('config.json', 'r') as f:
-            config = json.load(f)
-            
-        print("✅ Configuration file is valid")
-        print(f"   - AWS Region: {config.get('aws_region', 'us-east-1')}")
-        print(f"   - Local DynamoDB: {config.get('local_dynamodb_endpoint', 'http://localhost:8000')}")
-        print(f"   - Table Prefix: {config.get('local_table_prefix', 'local_')}")
-        print(f"   - Batch Size: {config.get('batch_size', 25)}")
+        from dotenv import dotenv_values
+        config = dotenv_values('.env')
+
+        # Check required fields
+        required_fields = [
+            'AWS_SSO_PROFILE', 'AWS_ACCOUNT_ID', 'AWS_ROLE_NAME', 'AWS_REGION',
+            'LOCAL_DYNAMODB_ENDPOINT', 'LOCAL_TABLE_PREFIX', 'BATCH_SIZE'
+        ]
+
+        missing_fields = [
+            field for field in required_fields if field not in config or not config[field]]
+        if missing_fields:
+            print(f"❌ .env file missing or empty fields: {missing_fields}")
+            return False
+
+        print("✅ .env file is valid")
+        print(f"   - AWS SSO Profile: {config['AWS_SSO_PROFILE']}")
+        print(f"   - AWS Account ID: {config['AWS_ACCOUNT_ID']}")
+        print(f"   - AWS Role Name: {config['AWS_ROLE_NAME']}")
+        print(f"   - AWS Region: {config['AWS_REGION']}")
+        print(f"   - Local DynamoDB: {config['LOCAL_DYNAMODB_ENDPOINT']}")
+        print(f"   - Table Prefix: {config['LOCAL_TABLE_PREFIX']}")
+        print(f"   - Batch Size: {config['BATCH_SIZE']}")
         return True
-        
-    except json.JSONDecodeError:
-        print("❌ Config file contains invalid JSON")
+
+    except ImportError:
+        print("❌ python-dotenv not installed")
+        print("💡 Run: pip install python-dotenv")
         return False
     except Exception as e:
-        print(f"❌ Error reading config file: {e}")
+        print(f"❌ Error reading .env file: {e}")
         return False
+
 
 def check_local_dynamodb():
     """Check if local DynamoDB is running."""
     try:
-        # Load config to get endpoint
+        # Load endpoint from .env or use default
         endpoint = "http://localhost:8000"
-        if os.path.exists('config.json'):
-            with open('config.json', 'r') as f:
-                config = json.load(f)
-                endpoint = config.get('local_dynamodb_endpoint', endpoint)
-        
+        if os.path.exists('.env'):
+            from dotenv import dotenv_values
+            config = dotenv_values('.env')
+            endpoint = config.get('LOCAL_DYNAMODB_ENDPOINT', endpoint)
+
         client = boto3.client(
             'dynamodb',
             endpoint_url=endpoint,
@@ -95,23 +82,25 @@ def check_local_dynamodb():
             aws_access_key_id='dummy',
             aws_secret_access_key='dummy'
         )
-        
+
         response = client.list_tables()
         tables = response.get('TableNames', [])
-        
+
         print(f"✅ Local DynamoDB is running at {endpoint}")
         if tables:
-            print(f"   - Found {len(tables)} existing tables: {', '.join(tables[:5])}{'...' if len(tables) > 5 else ''}")
+            print(
+                f"   - Found {len(tables)} existing tables: {', '.join(tables[:5])}{'...' if len(tables) > 5 else ''}")
         else:
             print("   - No existing tables found")
-        
+
         return True
-        
+
     except Exception as e:
         print(f"❌ Local DynamoDB is not accessible at {endpoint}")
         print(f"   Error: {e}")
         print("   Please start local DynamoDB before running the cloner")
         return False
+
 
 def check_python_dependencies():
     """Check if required Python packages are installed."""
@@ -129,28 +118,31 @@ def check_python_dependencies():
         print("   - Or run: make install")
         return False
 
+
 def check_package_manager():
     """Check if uv or pip is available."""
     import subprocess
-    
+
     managers = []
-    
+
     # Check for uv
     try:
-        result = subprocess.run(['uv', '--version'], capture_output=True, text=True)
+        result = subprocess.run(['uv', '--version'],
+                                capture_output=True, text=True)
         if result.returncode == 0:
             managers.append(f"uv {result.stdout.strip()}")
     except FileNotFoundError:
         pass
-    
+
     # Check for pip
     try:
-        result = subprocess.run(['pip', '--version'], capture_output=True, text=True)
+        result = subprocess.run(['pip', '--version'],
+                                capture_output=True, text=True)
         if result.returncode == 0:
             managers.append(f"pip {result.stdout.strip()}")
     except FileNotFoundError:
         pass
-    
+
     if managers:
         print("✅ Package managers available:")
         for manager in managers:
@@ -161,49 +153,53 @@ def check_package_manager():
         print("   Please install uv or pip to manage dependencies")
         return False
 
+
 def main():
     """Run all setup checks."""
     print("🔍 DynamoDB Table Cloner - Setup Verification")
     print("=" * 60)
-    
+
     checks = [
         ("Package Manager", check_package_manager),
         ("Python Dependencies", check_python_dependencies),
-        ("Main Script", lambda: check_file_exists('table_cloner.py', 'Main script')),
-        ("Requirements File", lambda: check_file_exists('requirements.txt', 'Requirements file')),
-        ("Credentials File", check_credentials_file),
-        ("Configuration File", check_config_file),
+        ("Main Script", lambda: check_file_exists(
+            'table_cloner.py', 'Main script')),
+        ("Requirements File", lambda: check_file_exists(
+            'requirements.txt', 'Requirements file')),
+        ("Environment Configuration", check_env_file),
         ("Local DynamoDB", check_local_dynamodb),
     ]
-    
+
     results = []
     for check_name, check_func in checks:
         print(f"\n📋 Checking {check_name}...")
         result = check_func()
         results.append((check_name, result))
-    
+
     # Summary
     print("\n" + "=" * 60)
     print("SETUP VERIFICATION SUMMARY")
     print("=" * 60)
-    
+
     passed = sum(1 for _, result in results if result)
     total = len(results)
-    
+
     for check_name, result in results:
         status = "✅ PASS" if result else "❌ FAIL"
         print(f"{status} {check_name}")
-    
+
     print(f"\nOverall: {passed}/{total} checks passed")
-    
+
     if passed == total:
         print("\n🎉 All checks passed! You're ready to clone tables.")
         print("\nExample usage:")
         print("  python table_cloner.py dev_users")
         print("  python example_usage.py")
     else:
-        print(f"\n⚠️  {total - passed} check(s) failed. Please fix the issues above before proceeding.")
+        print(
+            f"\n⚠️  {total - passed} check(s) failed. Please fix the issues above before proceeding.")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

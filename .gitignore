@@ -36,6 +36,5 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
-
-# Credentials (keep the sample but ignore actual credentials)
-credentials.json
+# Environment and Configuration
+.env
