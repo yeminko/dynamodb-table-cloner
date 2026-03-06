@@ -15,9 +15,8 @@ Clone DynamoDB tables from cloud to local DynamoDB with automated AWS SSO authen
 
 1. **Start Local DynamoDB**
 
-   ```bash
-   docker run -p 8000:8000 amazon/dynamodb-local
-   ```
+   - Make sure you have a local DynamoDB instance running at `http://localhost:8000`.
+   - You can use NoSql Workbench, DynamoDB Local Docker image, or any.
 
 2. **Install Dependencies**
 
