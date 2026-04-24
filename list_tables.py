@@ -9,8 +9,7 @@ import os
 import boto3
 import argparse
 import sys
-from botocore.exceptions import ClientError, NoCredentialsError
-from typing import Dict, List
+from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 from pathlib import Path
 from get_sso_credentials import get_aws_sso_credentials
@@ -62,12 +61,12 @@ class DynamoDBTableLister:
             region_name=region
         )
 
-    def list_tables_in_region(self, region: str = None) -> List[str]:
+    def list_tables_in_region(self, region: str | None = None) -> list[str]:
         """
         List all tables in the specified region.
 
         Args:
-            region (str): AWS region to check. If None, uses config region.
+            region (str | None): AWS region to check. If None, uses config region.
 
         Returns:
             List[str]: List of table names
@@ -105,7 +104,7 @@ class DynamoDBTableLister:
             print(f"❌ Error connecting to region {region}: {e}")
             return []
 
-    def display_tables(self, tables: List[str], region: str, filter_prefix: str = None) -> None:
+    def display_tables(self, tables: list[str], region: str, filter_prefix: str = None) -> None:
         """
         Display the list of tables with formatting.
 
@@ -150,7 +149,7 @@ class DynamoDBTableLister:
                     if count >= 2:  # Only show prefixes with 2+ tables
                         print(f"  • {prefix}: {count} tables")
 
-    def check_multiple_regions(self, filter_prefix: str = None) -> Dict[str, List[str]]:
+    def check_multiple_regions(self, filter_prefix: str = None) -> dict[str, list[str]]:
         """
         Check for tables across multiple AWS regions.
 
@@ -158,7 +157,7 @@ class DynamoDBTableLister:
             filter_prefix (str): Optional prefix to filter tables
 
         Returns:
-            Dict[str, List[str]]: Dictionary mapping regions to table lists
+            dict[str, list[str]]: Dictionary mapping regions to table lists
         """
         regions = [
             'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2',
@@ -183,7 +182,7 @@ class DynamoDBTableLister:
 
         return found_tables
 
-    def search_table(self, table_name: str) -> Dict[str, bool]:
+    def search_table(self, table_name: str) -> dict[str, bool]:
         """
         Search for a specific table across multiple regions.
 
@@ -191,7 +190,7 @@ class DynamoDBTableLister:
             table_name (str): Name of the table to search for
 
         Returns:
-            Dict[str, bool]: Dictionary mapping regions to whether table exists
+            dict[str, bool]: Dictionary mapping regions to whether table exists
         """
         regions = [
             'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2',

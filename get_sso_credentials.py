@@ -3,7 +3,6 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 
 
@@ -25,34 +24,32 @@ def get_latest_sso_cache_file():
     return latest_file
 
 
-def load_config_from_env() -> Dict[str, str]:
-    """Load configuration from .env file."""
-    # Load .env file from the script's directory
+def load_config_from_env() -> dict[str, str]:
     env_path = Path(__file__).parent / ".env"
-
     if not env_path.exists():
         raise FileNotFoundError(f".env file not found at {env_path}")
 
     load_dotenv(env_path)
 
-    # Get required configuration
-    required_vars = {
-        "AWS_SSO_PROFILE": os.getenv("AWS_SSO_PROFILE"),
-        "AWS_ACCOUNT_ID": os.getenv("AWS_ACCOUNT_ID"),
-        "AWS_ROLE_NAME": os.getenv("AWS_ROLE_NAME"),
-        "AWS_REGION": os.getenv("AWS_REGION")
-    }
+    keys = ["AWS_SSO_PROFILE", "AWS_ACCOUNT_ID", "AWS_ROLE_NAME", "AWS_REGION"]
+    config: dict[str, str] = {}
+    missing: list[str] = []
 
-    # Check for missing variables
-    missing = [key for key, value in required_vars.items() if not value]
+    for key in keys:
+        value = os.getenv(key)
+        if value is None:
+            missing.append(key)
+        else:
+            config[key] = value
+
     if missing:
         raise ValueError(
             f"Missing required environment variables: {', '.join(missing)}")
 
-    return required_vars
+    return config
 
 
-def get_aws_sso_credentials() -> Optional[Dict[str, Any]]:
+def get_aws_sso_credentials() -> (dict[str, dict[str, str]] | None):
     """
     Automate AWS SSO login and credential retrieval.
 
