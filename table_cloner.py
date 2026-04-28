@@ -228,12 +228,12 @@ class DynamoDBTableCloner:
             print("   • AWS credentials might not have DynamoDB permissions")
             print("   • Tables might be in a different AWS account")
 
-    def _create_local_table(self, source_schema: Dict[str, Any], target_table_name: str) -> None:
+    def _create_local_table(self, source_schema: TableDescriptionTypeDef, target_table_name: str) -> None:
         """
         Create the target table in local DynamoDB based on source schema.
 
         Args:
-            source_schema (Dict[str, Any]): Schema of the source table
+            source_schema (TableDescriptionTypeDef): Schema of the source table
             target_table_name (str): Name of the target table
         """
         try:
@@ -393,10 +393,10 @@ class DynamoDBTableCloner:
             if source_table_name.startswith(env_prefix):
                 # Replace the environment prefix with local prefix
                 base_name = source_table_name[len(env_prefix):]
-                return f"{self.config['local_table_prefix']}{base_name}"
+                return f"{self.config.local_table_prefix}{base_name}"
 
         # If no environment prefix found, just add local prefix
-        return f"{self.config['local_table_prefix']}{source_table_name}"
+        return f"{self.config.local_table_prefix}{source_table_name}"
 
     def clone_table(self, source_table_name: str) -> None:
         """
@@ -414,7 +414,8 @@ class DynamoDBTableCloner:
 
         # Step 1: Get source table schema
         print(f"🔍 Getting schema for table '{source_table_name}'...")
-        source_schema = self._get_table_schema(source_table_name)
+        source_schema: TableDescriptionTypeDef = self._get_table_schema(
+            source_table_name)
 
         # Step 2: Create target table in local DynamoDB
         print(f"🏗️  Creating table '{target_table_name}' in local DynamoDB...")

@@ -1,158 +1,104 @@
-import subprocess
 import json
 import os
+import subprocess
 import time
 from pathlib import Path
+
 from dotenv import load_dotenv
 
+from models import AWSSSOConfig
 
-def get_latest_sso_cache_file():
-    """Find the latest JSON file in the AWS SSO cache directory."""
+
+def get_latest_sso_cache_file() -> Path:
     sso_cache_dir = Path.home() / ".aws" / "sso" / "cache"
-
     if not sso_cache_dir.exists():
         raise FileNotFoundError(
             f"SSO cache directory not found: {sso_cache_dir}")
-
     json_files = list(sso_cache_dir.glob("*.json"))
-
     if not json_files:
         raise FileNotFoundError("No JSON files found in SSO cache directory")
-
-    # Get the most recently modified file
-    latest_file = max(json_files, key=lambda f: f.stat().st_mtime)
-    return latest_file
+    return max(json_files, key=lambda f: f.stat().st_mtime)
 
 
-def load_config_from_env() -> dict[str, str]:
+def load_config_from_env() -> AWSSSOConfig:
     env_path = Path(__file__).parent / ".env"
+
     if not env_path.exists():
         raise FileNotFoundError(f".env file not found at {env_path}")
 
     load_dotenv(env_path)
 
     keys = ["AWS_SSO_PROFILE", "AWS_ACCOUNT_ID", "AWS_ROLE_NAME", "AWS_REGION"]
-    config: dict[str, str] = {}
-    missing: list[str] = []
-
-    for key in keys:
-        value = os.getenv(key)
-        if value is None:
-            missing.append(key)
-        else:
-            config[key] = value
-
+    missing = [k for k in keys if not os.getenv(k)]
     if missing:
         raise ValueError(
             f"Missing required environment variables: {', '.join(missing)}")
 
-    return config
+    return AWSSSOConfig(
+        profile=os.environ["AWS_SSO_PROFILE"],
+        account_id=os.environ["AWS_ACCOUNT_ID"],
+        role_name=os.environ["AWS_ROLE_NAME"],
+        region=os.environ["AWS_REGION"],
+    )
 
 
-def get_aws_sso_credentials() -> (dict[str, dict[str, str]] | None):
-    """
-    Automate AWS SSO login and credential retrieval.
-
-    Returns:
-        dict: Formatted credentials dictionary or None if failed
-    """
-
-    # Load configuration from .env
+def get_aws_sso_credentials() -> dict[str, dict[str, str]] | None:
     try:
-        config = load_config_from_env()
-        profile = config["AWS_SSO_PROFILE"]
-        account_id = config["AWS_ACCOUNT_ID"]
-        role_name = config["AWS_ROLE_NAME"]
-        region = config["AWS_REGION"]
-    except (FileNotFoundError, ValueError, KeyError) as e:
-        print(f"Error loading configuration: {e}")
+        config: AWSSSOConfig = load_config_from_env()
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Configuration error: {e}")
         return None
 
-    # Step 1: Run aws sso login
-    print(f"Running AWS SSO login for profile '{profile}'...")
+    print(f"Running AWS SSO login for profile '{config.profile}'...")
     try:
-        subprocess.run(
-            ["aws", "sso", "login", "--profile", profile],
-            check=True
-        )
+        subprocess.run(["aws", "sso", "login", "--profile",
+                       config.profile], check=True)
     except subprocess.CalledProcessError as e:
-        print(f"Error during SSO login: {e}")
+        print(f"SSO login failed: {e}")
         return None
 
-    # Step 2: Wait for 3 seconds
-    print("Waiting 3 seconds for cache to update...")
+    print("Waiting for cache to update...")
     time.sleep(3)
 
-    # Step 3: Get the latest JSON file from SSO cache
-    print("Finding latest SSO cache file...")
     try:
-        latest_cache_file = get_latest_sso_cache_file()
-        print(f"Found: {latest_cache_file}")
-    except FileNotFoundError as e:
-        print(f"Error: {e}")
+        cache_file = get_latest_sso_cache_file()
+        access_token = json.loads(cache_file.read_text()).get("accessToken")
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Cache error: {e}")
         return None
-
-    # Step 4: Read and extract accessToken
-    print("Reading access token...")
-    with open(latest_cache_file, 'r') as f:
-        cache_data = json.load(f)
-
-    access_token = cache_data.get("accessToken")
 
     if not access_token:
         print("Error: accessToken not found in cache file")
         return None
 
-    # Step 5: Get role credentials
-    print("Fetching role credentials...")
     try:
         result = subprocess.run(
             [
                 "aws", "sso", "get-role-credentials",
-                "--account-id", account_id,
-                "--role-name", role_name,
-                "--region", region,
-                "--access-token", access_token
+                "--account-id", config.account_id,
+                "--role-name", config.role_name,
+                "--region", config.region,
+                "--access-token", access_token,
             ],
-            capture_output=True,
-            text=True,
-            check=True
+            capture_output=True, text=True, check=True,
         )
-
-        # Parse the response
-        response_data = json.loads(result.stdout)
-
-        # Step 6: Format the output
-        formatted_credentials = {
-            "roleCredentials": {
-                "accessKeyId": response_data["roleCredentials"]["accessKeyId"],
-                "secretAccessKey": response_data["roleCredentials"]["secretAccessKey"],
-                "sessionToken": response_data["roleCredentials"]["sessionToken"],
-                "expiration": response_data["roleCredentials"]["expiration"]
-            }
-        }
-
-        return formatted_credentials
-
+        return json.loads(result.stdout)
     except subprocess.CalledProcessError as e:
-        print(f"Error getting role credentials: {e}")
-        print(f"stderr: {e.stderr}")
+        print(f"Failed to get role credentials: {e.stderr}")
         return None
     except json.JSONDecodeError as e:
-        print(f"Error parsing JSON response: {e}")
+        print(f"Failed to parse credentials response: {e}")
         return None
 
 
 def main():
-    """Main function to get and print AWS SSO credentials."""
     credentials = get_aws_sso_credentials()
-
     if credentials:
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("AWS SSO Credentials:")
-        print("="*60)
+        print("=" * 60)
         print(json.dumps(credentials, indent=2))
-        print("="*60)
+        print("=" * 60)
     else:
         print("Failed to retrieve credentials")
 
