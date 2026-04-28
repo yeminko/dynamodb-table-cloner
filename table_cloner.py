@@ -4,6 +4,8 @@ DynamoDB Table Cloner
 This script clones a table from cloud DynamoDB to local DynamoDB.
 It automatically retrieves AWS credentials via SSO and uses configuration from .env file.
 """
+from mypy_boto3_dynamodb.type_defs import DescribeTableOutputTypeDef, TableDescriptionTypeDef
+from models import AppConfig
 
 import os
 import boto3
@@ -15,6 +17,8 @@ from dotenv import load_dotenv
 from pathlib import Path
 from get_sso_credentials import get_aws_sso_credentials
 
+from mypy_boto3_dynamodb import DynamoDBClient
+
 
 class DynamoDBTableCloner:
     def __init__(self):
@@ -22,8 +26,8 @@ class DynamoDBTableCloner:
         Initialize the DynamoDB Table Cloner.
         Loads configuration from .env file.
         """
-        self.cloud_client = None
-        self.local_client = None
+        self.cloud_client: DynamoDBClient
+        self.local_client: DynamoDBClient
         self._load_config()
         self._load_credentials()
         self._initialize_clients()
@@ -40,12 +44,13 @@ class DynamoDBTableCloner:
         load_dotenv(env_path)
 
         # Load configuration from environment variables
-        self.config = {
-            "aws_region": os.getenv("AWS_REGION", "us-east-1"),
-            "local_dynamodb_endpoint": os.getenv("LOCAL_DYNAMODB_ENDPOINT", "http://localhost:8000"),
-            "local_table_prefix": os.getenv("LOCAL_TABLE_PREFIX", "local_"),
-            "batch_size": int(os.getenv("BATCH_SIZE", "25"))
-        }
+        self.config = AppConfig(
+            aws_region=os.getenv("AWS_REGION", "us-east-1"),
+            local_dynamodb_endpoint=os.getenv(
+                "LOCAL_DYNAMODB_ENDPOINT", "http://localhost:8000"),
+            local_table_prefix=os.getenv("LOCAL_TABLE_PREFIX", "local_"),
+            batch_size=int(os.getenv("BATCH_SIZE", "25"))
+        )
         print("✓ Configuration loaded from .env file")
 
     def _load_credentials(self) -> None:
@@ -67,14 +72,14 @@ class DynamoDBTableCloner:
                 aws_access_key_id=self.credentials['accessKeyId'],
                 aws_secret_access_key=self.credentials['secretAccessKey'],
                 aws_session_token=self.credentials['sessionToken'],
-                region_name=self.config['aws_region']
+                region_name=self.config.aws_region
             )
 
             # Local DynamoDB client
             self.local_client = boto3.client(
                 'dynamodb',
-                endpoint_url=self.config['local_dynamodb_endpoint'],
-                region_name=self.config['aws_region'],
+                endpoint_url=self.config.local_dynamodb_endpoint,
+                region_name=self.config.aws_region,
                 aws_access_key_id='dummy',
                 aws_secret_access_key='dummy'
             )
@@ -106,7 +111,7 @@ class DynamoDBTableCloner:
             print(f"❌ Error testing cloud connection: {e}")
             sys.exit(1)
 
-    def _get_table_schema(self, table_name: str) -> Dict[str, Any]:
+    def _get_table_schema(self, table_name: str) -> TableDescriptionTypeDef:
         """
         Get the schema of the source table from cloud DynamoDB.
 
@@ -114,10 +119,11 @@ class DynamoDBTableCloner:
             table_name (str): Name of the source table
 
         Returns:
-            Dict[str, Any]: Table schema information
+            TableDescriptionTypeDef: Table schema information
         """
         try:
-            response = self.cloud_client.describe_table(TableName=table_name)
+            response: DescribeTableOutputTypeDef = self.cloud_client.describe_table(
+                TableName=table_name)
             return response['Table']
         except ClientError as e:
             if e.response['Error']['Code'] == 'ResourceNotFoundException':
@@ -302,7 +308,7 @@ class DynamoDBTableCloner:
 
             item_count = 0
             # Use configurable batch size
-            batch_size = self.config['batch_size']
+            batch_size = self.config.batch_size
             batch_items = []
 
             for page in page_iterator:

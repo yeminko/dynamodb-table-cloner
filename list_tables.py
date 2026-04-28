@@ -12,6 +12,9 @@ import sys
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 from pathlib import Path
+
+from mypy_boto3_dynamodb import DynamoDBClient
+
 from get_sso_credentials import get_aws_sso_credentials
 
 
@@ -51,8 +54,9 @@ class DynamoDBTableLister:
         self.credentials = creds_data['roleCredentials']
         print("✓ Credentials obtained via SSO")
 
-    def _create_client(self, region: str) -> boto3.client:
+    def _create_client(self, region: str) -> DynamoDBClient:
         """Create a DynamoDB client for the specified region."""
+
         return boto3.client(
             'dynamodb',
             aws_access_key_id=self.credentials['accessKeyId'],
@@ -104,7 +108,7 @@ class DynamoDBTableLister:
             print(f"❌ Error connecting to region {region}: {e}")
             return []
 
-    def display_tables(self, tables: list[str], region: str, filter_prefix: str = None) -> None:
+    def display_tables(self, tables: list[str], region: str, filter_prefix: str) -> None:
         """
         Display the list of tables with formatting.
 
@@ -123,7 +127,7 @@ class DynamoDBTableLister:
                 t for t in tables if t.startswith(filter_prefix)]
             if filtered_tables:
                 print(
-                    f"📋 Found {len(filtered_tables)} table(s) with prefix '{filter_prefix}' in {region}:")
+                    f"📋 Found {len(filtered_tables)} t`able(s) with prefix '{filter_prefix}' in {region}:")
                 for i, table in enumerate(filtered_tables, 1):
                     print(f"  {i:3d}. {table}")
             else:
@@ -149,7 +153,7 @@ class DynamoDBTableLister:
                     if count >= 2:  # Only show prefixes with 2+ tables
                         print(f"  • {prefix}: {count} tables")
 
-    def check_multiple_regions(self, filter_prefix: str = None) -> dict[str, list[str]]:
+    def check_multiple_regions(self, filter_prefix: str) -> dict[str, list[str]]:
         """
         Check for tables across multiple AWS regions.
 
