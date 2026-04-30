@@ -10,17 +10,23 @@ from models import AWSSSOConfig
 
 
 def get_latest_sso_cache_file() -> Path:
+    """Return the most recently modified JSON file from the AWS SSO cache directory."""
     sso_cache_dir = Path.home() / ".aws" / "sso" / "cache"
+
     if not sso_cache_dir.exists():
         raise FileNotFoundError(
             f"SSO cache directory not found: {sso_cache_dir}")
+
     json_files = list(sso_cache_dir.glob("*.json"))
+
     if not json_files:
         raise FileNotFoundError("No JSON files found in SSO cache directory")
+
     return max(json_files, key=lambda f: f.stat().st_mtime)
 
 
 def load_config_from_env() -> AWSSSOConfig:
+    """Load AWS SSO configuration from the .env file and return it as an AWSSSOConfig instance."""
     env_path = Path(__file__).parent / ".env"
 
     if not env_path.exists():
@@ -43,6 +49,7 @@ def load_config_from_env() -> AWSSSOConfig:
 
 
 def get_aws_sso_credentials() -> dict[str, dict[str, str]] | None:
+    """Authenticate via AWS SSO and return temporary role credentials, or None on failure."""
     try:
         config: AWSSSOConfig = load_config_from_env()
     except (FileNotFoundError, ValueError) as e:
@@ -58,7 +65,7 @@ def get_aws_sso_credentials() -> dict[str, dict[str, str]] | None:
         return None
 
     print("Waiting for cache to update...")
-    time.sleep(3)
+    time.sleep(1)
 
     try:
         cache_file = get_latest_sso_cache_file()
@@ -92,6 +99,7 @@ def get_aws_sso_credentials() -> dict[str, dict[str, str]] | None:
 
 
 def main():
+    """Retrieve and print AWS SSO credentials to stdout."""
     credentials = get_aws_sso_credentials()
     if credentials:
         print("\n" + "=" * 60)
