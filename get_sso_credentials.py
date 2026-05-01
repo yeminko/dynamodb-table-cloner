@@ -6,7 +6,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from models import AWSSSOConfig
+from models.aws_sso_config import AWSSSOConfig
+from models.role_credentials import RoleCredentials
 
 
 def get_latest_sso_cache_file() -> Path:
@@ -48,7 +49,7 @@ def load_config_from_env() -> AWSSSOConfig:
     )
 
 
-def get_aws_sso_credentials() -> dict[str, dict[str, str]] | None:
+def get_aws_sso_credentials() -> RoleCredentials | None:
     """Authenticate via AWS SSO and return temporary role credentials, or None on failure."""
     try:
         config: AWSSSOConfig = load_config_from_env()
@@ -89,7 +90,20 @@ def get_aws_sso_credentials() -> dict[str, dict[str, str]] | None:
             ],
             capture_output=True, text=True, check=True,
         )
-        return json.loads(result.stdout)
+
+        credentials_data = json.loads(result.stdout).get("roleCredentials")
+
+        if not credentials_data:
+            print("Error: roleCredentials not found in response")
+            return None
+
+        return RoleCredentials(
+            access_key_id=credentials_data["accessKeyId"],
+            secret_access_key=credentials_data["secretAccessKey"],
+            session_token=credentials_data["sessionToken"],
+            expiration=credentials_data["expiration"],
+        )
+
     except subprocess.CalledProcessError as e:
         print(f"Failed to get role credentials: {e.stderr}")
         return None
@@ -100,12 +114,12 @@ def get_aws_sso_credentials() -> dict[str, dict[str, str]] | None:
 
 def main():
     """Retrieve and print AWS SSO credentials to stdout."""
-    credentials = get_aws_sso_credentials()
+    credentials: RoleCredentials | None = get_aws_sso_credentials()
     if credentials:
         print("\n" + "=" * 60)
         print("AWS SSO Credentials:")
         print("=" * 60)
-        print(json.dumps(credentials, indent=2))
+        print(json.dumps(credentials.__dict__, indent=2))
         print("=" * 60)
     else:
         print("Failed to retrieve credentials")

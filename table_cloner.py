@@ -5,7 +5,7 @@ This script clones a table from cloud DynamoDB to local DynamoDB.
 It automatically retrieves AWS credentials via SSO and uses configuration from .env file.
 """
 from mypy_boto3_dynamodb.type_defs import DescribeTableOutputTypeDef, TableDescriptionTypeDef
-from models import AppConfig
+from models.app_config import AppConfig
 
 import os
 import boto3

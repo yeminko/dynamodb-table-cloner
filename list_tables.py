@@ -4,6 +4,7 @@ DynamoDB Table Lister
 This script lists all tables in cloud DynamoDB across different regions.
 It automatically retrieves AWS credentials via SSO and uses configuration from .env file.
 """
+from models.role_credentials import RoleCredentials
 
 import os
 import boto3
@@ -47,11 +48,13 @@ class DynamoDBTableLister:
     def _load_credentials(self) -> None:
         """Load AWS credentials using SSO."""
         print("🔐 Getting AWS credentials via SSO...")
-        creds_data = get_aws_sso_credentials()
+        creds_data: RoleCredentials | None = get_aws_sso_credentials()
+
         if not creds_data:
             print("❌ Error: Failed to get credentials via SSO")
             sys.exit(1)
-        self.credentials = creds_data['roleCredentials']
+
+        self.credentials: RoleCredentials = creds_data
         print("✓ Credentials obtained via SSO")
 
     def _create_client(self, region: str) -> DynamoDBClient:
@@ -59,9 +62,9 @@ class DynamoDBTableLister:
 
         return boto3.client(
             'dynamodb',
-            aws_access_key_id=self.credentials['accessKeyId'],
-            aws_secret_access_key=self.credentials['secretAccessKey'],
-            aws_session_token=self.credentials['sessionToken'],
+            aws_access_key_id=self.credentials.access_key_id,
+            aws_secret_access_key=self.credentials.secret_access_key,
+            aws_session_token=self.credentials.session_token,
             region_name=region
         )
 
@@ -127,7 +130,7 @@ class DynamoDBTableLister:
                 t for t in tables if t.startswith(filter_prefix)]
             if filtered_tables:
                 print(
-                    f"📋 Found {len(filtered_tables)} t`able(s) with prefix '{filter_prefix}' in {region}:")
+                    f"📋 Found {len(filtered_tables)} table(s) with prefix '{filter_prefix}' in {region}:")
                 for i, table in enumerate(filtered_tables, 1):
                     print(f"  {i:3d}. {table}")
             else:
