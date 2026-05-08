@@ -56,11 +56,11 @@ class DynamoDBTableCloner:
     def _load_credentials(self) -> None:
         """Load AWS credentials using SSO."""
         print("🔐 Getting AWS credentials via SSO...")
-        creds_data = get_aws_sso_credentials()
-        if not creds_data:
+        role_credentials = get_aws_sso_credentials()
+        if not role_credentials:
             print("❌ Error: Failed to get credentials via SSO")
             sys.exit(1)
-        self.credentials = creds_data['roleCredentials']
+        self.credentials = role_credentials
         print("✓ Credentials obtained via SSO")
 
     def _initialize_clients(self) -> None:
@@ -69,9 +69,9 @@ class DynamoDBTableCloner:
             # Cloud DynamoDB client
             self.cloud_client = boto3.client(
                 'dynamodb',
-                aws_access_key_id=self.credentials['accessKeyId'],
-                aws_secret_access_key=self.credentials['secretAccessKey'],
-                aws_session_token=self.credentials['sessionToken'],
+                aws_access_key_id=self.credentials.access_key_id,
+                aws_secret_access_key=self.credentials.secret_access_key,
+                aws_session_token=self.credentials.session_token,
                 region_name=self.config.aws_region
             )
 
@@ -129,104 +129,9 @@ class DynamoDBTableCloner:
             if e.response['Error']['Code'] == 'ResourceNotFoundException':
                 print(
                     f"❌ Error: Table '{table_name}' not found in cloud DynamoDB.")
-                print("📋 Let me check what tables are available...")
-                self._list_available_tables()
             else:
                 print(f"❌ Error describing table: {e}")
             sys.exit(1)
-
-    def _list_available_tables(self) -> None:
-        """List all available tables in cloud DynamoDB."""
-        try:
-            print("🔍 Listing available tables in cloud DynamoDB...")
-            paginator = self.cloud_client.get_paginator('list_tables')
-            page_iterator = paginator.paginate()
-
-            all_tables = []
-            for page in page_iterator:
-                all_tables.extend(page.get('TableNames', []))
-
-            if not all_tables:
-                print("📋 No tables found in cloud DynamoDB.")
-            else:
-                print(f"📋 Found {len(all_tables)} table(s) in cloud DynamoDB:")
-                for i, table in enumerate(sorted(all_tables), 1):
-                    print(f"  {i}. {table}")
-
-                # Show tables that match common prefixes
-                dev_tables = [t for t in all_tables if t.startswith('dev_')]
-                if dev_tables:
-                    print(f"\n📋 Tables with 'dev_' prefix:")
-                    for table in sorted(dev_tables):
-                        print(f"  • {table}")
-
-        except ClientError as e:
-            print(f"❌ Error listing tables: {e}")
-            print(
-                "💡 This might indicate an issue with your AWS credentials or permissions.")
-
-    def _check_multiple_regions(self) -> None:
-        """Check for tables across multiple AWS regions."""
-        regions = [
-            'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2',
-            'eu-west-1', 'eu-west-2', 'eu-central-1',
-            'ap-southeast-1', 'ap-southeast-2', 'ap-northeast-1'
-        ]
-
-        print("🌍 Checking for tables across multiple AWS regions...")
-        found_tables = {}
-
-        for region in regions:
-            try:
-                print(f"🔍 Checking region: {region}")
-                regional_client = boto3.client(
-                    'dynamodb',
-                    aws_access_key_id=self.credentials['accessKeyId'],
-                    aws_secret_access_key=self.credentials['secretAccessKey'],
-                    aws_session_token=self.credentials['sessionToken'],
-                    region_name=region
-                )
-
-                paginator = regional_client.get_paginator('list_tables')
-                page_iterator = paginator.paginate()
-
-                region_tables = []
-                for page in page_iterator:
-                    region_tables.extend(page.get('TableNames', []))
-
-                if region_tables:
-                    found_tables[region] = region_tables
-                    print(
-                        f"  ✓ Found {len(region_tables)} table(s) in {region}")
-
-            except ClientError as e:
-                if e.response['Error']['Code'] in ['UnauthorizedOperation', 'AccessDenied']:
-                    print(f"  ⚠️  No access to region {region}")
-                else:
-                    print(f"  ❌ Error checking {region}: {e}")
-            except Exception as e:
-                print(f"  ❌ Error checking {region}: {e}")
-
-        if found_tables:
-            print(f"\n📋 Summary of tables found across regions:")
-            for region, tables in found_tables.items():
-                print(f"\n🌍 Region: {region}")
-                for table in sorted(tables):
-                    print(f"  • {table}")
-
-                # Highlight tables matching the search pattern
-                dev_tables = [
-                    t for t in tables if 'Dashboard' in t or t.startswith('dev_')]
-                if dev_tables:
-                    print(f"  🎯 Relevant tables:")
-                    for table in dev_tables:
-                        print(f"    → {table}")
-        else:
-            print("\n📋 No tables found in any checked regions.")
-            print("💡 Possible reasons:")
-            print("   • Tables might be in a region not checked")
-            print("   • AWS credentials might not have DynamoDB permissions")
-            print("   • Tables might be in a different AWS account")
 
     def _create_local_table(self, source_schema: TableDescriptionTypeDef, target_table_name: str) -> None:
         """
@@ -242,7 +147,7 @@ class DynamoDBTableCloner:
             attribute_definitions = source_schema['AttributeDefinitions']
 
             # Set billing mode to PAY_PER_REQUEST for local DynamoDB
-            table_params = {
+            table_params: Dict[str, Any] = {
                 'TableName': target_table_name,
                 'KeySchema': key_schema,
                 'AttributeDefinitions': attribute_definitions,
@@ -436,41 +341,17 @@ def main():
     )
     parser.add_argument(
         'table_name',
-        nargs='?',
         help='Name of the source table to clone (e.g., "dev_users")'
     )
     parser.add_argument(
-        '--list-tables',
-        action='store_true',
-        help='List all available tables in cloud DynamoDB and exit'
-    )
-
-    parser.add_argument(
-        '--check-regions',
-        action='store_true',
-        help='Check for tables across multiple AWS regions'
+        '--name',
+        help='Custom table name for the local DynamoDB (overrides default naming convention)'
     )
 
     args = parser.parse_args()
 
     # Initialize the cloner (reads from .env automatically)
     cloner = DynamoDBTableCloner()
-
-    # If list-tables option is used, just list tables and exit
-    if args.list_tables:
-        cloner._list_available_tables()
-        return
-
-    # If check-regions option is used, check multiple regions and exit
-    if args.check_regions:
-        cloner._check_multiple_regions()
-        return
-
-    # Check if table name is provided
-    if not args.table_name:
-        print("❌ Error: table_name is required unless using --list-tables")
-        parser.print_help()
-        sys.exit(1)
 
     # Check if local DynamoDB is running
     try:
