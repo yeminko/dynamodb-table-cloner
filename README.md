@@ -1,11 +1,9 @@
 # DynamoDB Table Cloner
 
-Clone DynamoDB tables from cloud to local DynamoDB with automated AWS SSO authentication.
+Clone DynamoDB tables from cloud to local DynamoDB with AWS SSO authentication.
 
 ## Features
 
-- **Simple .env Configuration** - All settings in one place!
-- **Automated AWS SSO Authentication** - No manual credential management!
 - Clone table schema and data from cloud to local DynamoDB
 - Auto-rename tables: `dev_users` → `local_users`
 - Discover tables across AWS regions
@@ -58,17 +56,14 @@ source .venv/bin/activate
 
 ### Clone Tables
 
-The cloner uses automated AWS SSO authentication. Configuration is read from `.env`:
+Clone tables by name. This will clone both schema and data, renaming the table with the specified prefix in `.env`:
 
 ```bash
-# Clone a table (automatically handles SSO login)
-python3 table_cloner.py dev_Dashboard
+# Clone a table
+python table_cloner.py dev_users
 
-# Clone another table
-python3 table_cloner.py dev_users
-
-# List available tables first
-python3 table_cloner.py --list-tables
+# Clone a table with custom table name
+python table_cloner.py dev_users --name my_users
 ```
 
 ### Discover Tables
@@ -77,19 +72,19 @@ All commands use the `.env` configuration automatically:
 
 ```bash
 # List all tables in configured region
-python3 list_tables.py
+python list_tables.py
 
 # Filter by prefix
-python3 list_tables.py --prefix dev_
+python list_tables.py --prefix dev_
 
 # Search specific table
-python3 list_tables.py --search dev_Dashboard
+python list_tables.py --search dev_Dashboard
 
 # Check all regions
-python3 list_tables.py --all-regions
+python list_tables.py --all-regions
 
 # Check specific region
-python3 list_tables.py --region us-west-2
+python list_tables.py --region us-west-2
 ```
 
 ### Manual Credential Retrieval
@@ -97,7 +92,7 @@ python3 list_tables.py --region us-west-2
 If you need to manually get AWS SSO credentials:
 
 ```bash
-python3 get_sso_credentials.py
+python get_sso_credentials.py
 ```
 
 This reads from `.env` and prints the credentials in JSON format.

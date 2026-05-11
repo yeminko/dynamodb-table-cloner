@@ -4,8 +4,9 @@ DynamoDB Table Cloner
 This script clones a table from cloud DynamoDB to local DynamoDB.
 It automatically retrieves AWS credentials via SSO and uses configuration from .env file.
 """
+from models.role_credentials import RoleCredentials
+from models.environment_config import EnvironmentConfig
 from mypy_boto3_dynamodb.type_defs import DescribeTableOutputTypeDef, TableDescriptionTypeDef
-from models.app_config import AppConfig
 
 import os
 import boto3
@@ -16,6 +17,7 @@ from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from pathlib import Path
 from get_sso_credentials import get_aws_sso_credentials
+from utils.common_utils import load_config_from_env
 
 from mypy_boto3_dynamodb import DynamoDBClient
 
@@ -32,31 +34,53 @@ class DynamoDBTableCloner:
         self._load_credentials()
         self._initialize_clients()
 
+    def clone_table(self, source_table_name: str, custom_table_name: str | None = None) -> None:
+        """
+        Clone a table from cloud DynamoDB to local DynamoDB.
+
+        Args:
+            source_table_name (str): Name of the source table in cloud DynamoDB
+            custom_table_name (str | None): Custom name for the target table in local DynamoDB
+
+        """
+        # Determine target table name
+        target_table_name = custom_table_name if custom_table_name else self._generate_target_table_name(
+            source_table_name)
+
+        print(f"🚀 Starting table cloning process...")
+        print(f"📋 Source table: {source_table_name}")
+        print(f"📋 Target table: {target_table_name}")
+
+        # Step 1: Get source table schema
+        print(f"🔍 Getting schema for table '{source_table_name}'...")
+        source_schema: TableDescriptionTypeDef = self._get_table_schema(
+            source_table_name)
+
+        # Step 2: Create target table in local DynamoDB
+        print(f"🏗️  Creating table '{target_table_name}' in local DynamoDB...")
+        self._create_local_table(source_schema, target_table_name)
+
+        # Step 3: Copy data from source to target
+        self._copy_table_data(source_table_name, target_table_name)
+
+        print(f"🎉 Table cloning completed successfully!")
+        print(
+            f"✅ Table '{source_table_name}' has been cloned to '{target_table_name}' in local DynamoDB")
+
     def _load_config(self) -> None:
         """Load configuration from .env file."""
-        # Load .env file
-        env_path = Path(__file__).parent / ".env"
-        if not env_path.exists():
-            print(f"❌ Error: .env file not found at {env_path}")
-            print("💡 Please create a .env file based on .env.template")
+        try:
+            self.config: EnvironmentConfig = load_config_from_env()
+            print("✓ Configuration loaded successfully")
+        except (FileNotFoundError, ValueError) as e:
+            print(f"❌ Configuration error: {e}")
             sys.exit(1)
-
-        load_dotenv(env_path)
-
-        # Load configuration from environment variables
-        self.config = AppConfig(
-            aws_region=os.getenv("AWS_REGION", "us-east-1"),
-            local_dynamodb_endpoint=os.getenv(
-                "LOCAL_DYNAMODB_ENDPOINT", "http://localhost:8000"),
-            local_table_prefix=os.getenv("LOCAL_TABLE_PREFIX", "local_"),
-            batch_size=int(os.getenv("BATCH_SIZE", "25"))
-        )
-        print("✓ Configuration loaded from .env file")
 
     def _load_credentials(self) -> None:
         """Load AWS credentials using SSO."""
         print("🔐 Getting AWS credentials via SSO...")
-        role_credentials = get_aws_sso_credentials()
+        role_credentials: RoleCredentials | None = get_aws_sso_credentials(
+            self.config)
         if not role_credentials:
             print("❌ Error: Failed to get credentials via SSO")
             sys.exit(1)
@@ -86,6 +110,9 @@ class DynamoDBTableCloner:
 
             print("✓ DynamoDB clients initialized")
 
+            # Test local DynamoDB connection
+            self._test_local_connection()
+
             # Test cloud DynamoDB connection
             self._test_cloud_connection()
 
@@ -109,6 +136,17 @@ class DynamoDBTableCloner:
             sys.exit(1)
         except Exception as e:
             print(f"❌ Error testing cloud connection: {e}")
+            sys.exit(1)
+
+    def _test_local_connection(self) -> None:
+        """Test the connection to local DynamoDB."""
+        try:
+            # Try to list tables to verify local DynamoDB is running
+            response = self.local_client.list_tables(Limit=1)
+            print("✓ Successfully connected to local DynamoDB")
+        except Exception as e:
+            print(f"❌ Error connecting to local DynamoDB: {e}")
+            print("Please ensure local DynamoDB is running and accessible.")
             sys.exit(1)
 
     def _get_table_schema(self, table_name: str) -> TableDescriptionTypeDef:
@@ -303,36 +341,6 @@ class DynamoDBTableCloner:
         # If no environment prefix found, just add local prefix
         return f"{self.config.local_table_prefix}{source_table_name}"
 
-    def clone_table(self, source_table_name: str) -> None:
-        """
-        Clone a table from cloud DynamoDB to local DynamoDB.
-
-        Args:
-            source_table_name (str): Name of the source table in cloud DynamoDB
-        """
-        # Generate target table name by replacing environment prefix with local prefix
-        target_table_name = self._generate_target_table_name(source_table_name)
-
-        print(f"🚀 Starting table cloning process...")
-        print(f"📋 Source table: {source_table_name}")
-        print(f"📋 Target table: {target_table_name}")
-
-        # Step 1: Get source table schema
-        print(f"🔍 Getting schema for table '{source_table_name}'...")
-        source_schema: TableDescriptionTypeDef = self._get_table_schema(
-            source_table_name)
-
-        # Step 2: Create target table in local DynamoDB
-        print(f"🏗️  Creating table '{target_table_name}' in local DynamoDB...")
-        self._create_local_table(source_schema, target_table_name)
-
-        # Step 3: Copy data from source to target
-        self._copy_table_data(source_table_name, target_table_name)
-
-        print(f"🎉 Table cloning completed successfully!")
-        print(
-            f"✅ Table '{source_table_name}' has been cloned to '{target_table_name}' in local DynamoDB")
-
 
 def main():
     """Main function to run the table cloner."""
@@ -353,30 +361,9 @@ def main():
     # Initialize the cloner (reads from .env automatically)
     cloner = DynamoDBTableCloner()
 
-    # Check if local DynamoDB is running
-    try:
-        endpoint = os.getenv("LOCAL_DYNAMODB_ENDPOINT",
-                             "http://localhost:8000")
-        region = os.getenv("AWS_REGION", "us-east-1")
-
-        test_client = boto3.client(
-            'dynamodb',
-            endpoint_url=endpoint,
-            region_name=region,
-            aws_access_key_id='dummy',
-            aws_secret_access_key='dummy'
-        )
-        test_client.list_tables()
-        print(f"✓ Local DynamoDB is running on {endpoint}")
-    except Exception as e:
-        endpoint = os.getenv("LOCAL_DYNAMODB_ENDPOINT",
-                             "http://localhost:8000")
-        print(f"❌ Error: Local DynamoDB is not running on {endpoint}")
-        print("Please start local DynamoDB before running this script.")
-        sys.exit(1)
-
     # Run the cloner with the provided table name
-    cloner.clone_table(args.table_name)
+    cloner.clone_table(source_table_name=args.table_name,
+                       custom_table_name=args.name)
 
 
 if __name__ == "__main__":

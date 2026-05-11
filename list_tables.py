@@ -4,6 +4,7 @@ DynamoDB Table Lister
 This script lists all tables in cloud DynamoDB across different regions.
 It automatically retrieves AWS credentials via SSO and uses configuration from .env file.
 """
+from models.environment_config import EnvironmentConfig
 from models.role_credentials import RoleCredentials
 
 import os
@@ -18,6 +19,8 @@ from mypy_boto3_dynamodb import DynamoDBClient
 
 from get_sso_credentials import get_aws_sso_credentials
 
+from utils.common_utils import load_config_from_env
+
 
 class DynamoDBTableLister:
     def __init__(self):
@@ -30,25 +33,18 @@ class DynamoDBTableLister:
 
     def _load_config(self) -> None:
         """Load configuration from .env file."""
-        # Load .env file
-        env_path = Path(__file__).parent / ".env"
-        if not env_path.exists():
-            print(f"❌ Error: .env file not found at {env_path}")
-            print("💡 Please create a .env file based on .env.template")
+        try:
+            self.config: EnvironmentConfig = load_config_from_env()
+            print("✓ Configuration loaded successfully")
+        except (FileNotFoundError, ValueError) as e:
+            print(f"❌ Configuration error: {e}")
             sys.exit(1)
-
-        load_dotenv(env_path)
-
-        # Load configuration from environment variables
-        self.config = {
-            "aws_region": os.getenv("AWS_REGION", "us-east-1")
-        }
-        print("✓ Configuration loaded from .env file")
 
     def _load_credentials(self) -> None:
         """Load AWS credentials using SSO."""
         print("🔐 Getting AWS credentials via SSO...")
-        creds_data: RoleCredentials | None = get_aws_sso_credentials()
+        creds_data: RoleCredentials | None = get_aws_sso_credentials(
+            self.config)
 
         if not creds_data:
             print("❌ Error: Failed to get credentials via SSO")
@@ -79,7 +75,7 @@ class DynamoDBTableLister:
             List[str]: List of table names
         """
         if region is None:
-            region = self.config['aws_region']
+            region = self.config.aws_region
 
         try:
             print(f"🔍 Listing tables in region: {region}")
@@ -290,7 +286,7 @@ def main():
 
     else:
         # Check single region
-        region = args.region or lister.config['aws_region']
+        region = args.region or lister.config.aws_region
         tables = lister.list_tables_in_region(region)
         lister.display_tables(tables, region, args.prefix)
 
