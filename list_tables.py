@@ -31,39 +31,6 @@ class DynamoDBTableLister:
         self._load_config()
         self._load_credentials()
 
-    def _load_config(self) -> None:
-        """Load configuration from .env file."""
-        try:
-            self.config: EnvironmentConfig = load_config_from_env()
-            print("✓ Configuration loaded successfully")
-        except (FileNotFoundError, ValueError) as e:
-            print(f"❌ Configuration error: {e}")
-            sys.exit(1)
-
-    def _load_credentials(self) -> None:
-        """Load AWS credentials using SSO."""
-        print("🔐 Getting AWS credentials via SSO...")
-        creds_data: RoleCredentials | None = get_aws_sso_credentials(
-            self.config)
-
-        if not creds_data:
-            print("❌ Error: Failed to get credentials via SSO")
-            sys.exit(1)
-
-        self.credentials: RoleCredentials = creds_data
-        print("✓ Credentials obtained via SSO")
-
-    def _create_client(self, region: str) -> DynamoDBClient:
-        """Create a DynamoDB client for the specified region."""
-
-        return boto3.client(
-            'dynamodb',
-            aws_access_key_id=self.credentials.access_key_id,
-            aws_secret_access_key=self.credentials.secret_access_key,
-            aws_session_token=self.credentials.session_token,
-            region_name=region
-        )
-
     def list_tables_in_region(self, region: str | None = None) -> list[str]:
         """
         List all tables in the specified region.
@@ -222,6 +189,39 @@ class DynamoDBTableLister:
                 results[region] = False
 
         return results
+
+    def _load_config(self) -> None:
+        """Load configuration from .env file."""
+        try:
+            self.config: EnvironmentConfig = load_config_from_env()
+            print("✓ Configuration loaded successfully")
+        except (FileNotFoundError, ValueError) as e:
+            print(f"❌ Configuration error: {e}")
+            sys.exit(1)
+
+    def _load_credentials(self) -> None:
+        """Load AWS credentials using SSO."""
+        print("🔐 Getting AWS credentials via SSO...")
+        creds_data: RoleCredentials | None = get_aws_sso_credentials(
+            self.config)
+
+        if not creds_data:
+            print("❌ Error: Failed to get credentials via SSO")
+            sys.exit(1)
+
+        self.credentials: RoleCredentials = creds_data
+        print("✓ Credentials obtained via SSO")
+
+    def _create_client(self, region: str) -> DynamoDBClient:
+        """Create a DynamoDB client for the specified region."""
+
+        return boto3.client(
+            'dynamodb',
+            aws_access_key_id=self.credentials.access_key_id,
+            aws_secret_access_key=self.credentials.secret_access_key,
+            aws_session_token=self.credentials.session_token,
+            region_name=region
+        )
 
 
 def main():
