@@ -5,7 +5,10 @@ from models.environment_config import EnvironmentConfig
 
 
 def load_config_from_env() -> EnvironmentConfig:
-    """Load AWS SSO configuration from the .env file and return it as an EnvironmentConfig instance."""
+    """
+    Load configuration from .env file. 
+    Raises FileNotFoundError if .env is missing, ValueError if required vars are missing.
+    """
     env_path = Path(__file__).parent.parent / ".env"
 
     if not env_path.exists():

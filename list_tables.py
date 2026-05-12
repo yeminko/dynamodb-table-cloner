@@ -7,7 +7,6 @@ It automatically retrieves AWS credentials via SSO and uses configuration from .
 from models.environment_config import EnvironmentConfig
 from models.role_credentials import RoleCredentials
 
-import os
 import boto3
 import argparse
 import sys
