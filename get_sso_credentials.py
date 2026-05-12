@@ -41,20 +41,27 @@ def get_aws_sso_credentials(config: EnvironmentConfig) -> RoleCredentials | None
 
 def _ensure_valid_sso_token(config: EnvironmentConfig) -> bool:
     """Check SSO token expiry and trigger login if needed. Returns False on unrecoverable error."""
+    should_login = False
     try:
         cache_file = _get_latest_sso_cache_file()
         sso_cache_data = json.loads(cache_file.read_text())
         if _is_token_expired(sso_cache_data.get("expiresAt")):
-            print(
-                "⏰ SSO access token has expired! Starting SSO Login to refresh credentials.")
-            _run_sso_login(config)
+            print("⏰ SSO access token has expired!")
+            should_login = True
     except FileNotFoundError:
-        print(
-            "🔍 No SSO cache files found! Start running SSO Login to generate credentials.")
-        _run_sso_login(config)
-    except json.JSONDecodeError as e:
-        print(f"❌ Failed to parse SSO cache file: {e}")
-        return False
+        print("🔍 No SSO cache files found!")
+        should_login = True
+    except json.JSONDecodeError:
+        print("❌ Failed to parse SSO cache file!")
+        should_login = True
+
+    if should_login:
+        try:
+            print("🔐 Initiating SSO login flow...")
+            _run_sso_login(config)
+        except RuntimeError:
+            return False
+
     return True
 
 
@@ -137,7 +144,7 @@ def _run_sso_login(config: EnvironmentConfig) -> None:
                        config.aws_sso_profile], check=True)
     except subprocess.CalledProcessError as e:
         print(f"❌ SSO login failed: {e}")
-        return None
+        raise RuntimeError("SSO login failed")
 
 
 def _is_token_expired(expires_at: str | None) -> bool:

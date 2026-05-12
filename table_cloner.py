@@ -8,14 +8,11 @@ from models.role_credentials import RoleCredentials
 from models.environment_config import EnvironmentConfig
 from mypy_boto3_dynamodb.type_defs import DescribeTableOutputTypeDef, TableDescriptionTypeDef
 
-import os
 import boto3
 import argparse
 import sys
-from botocore.exceptions import ClientError, NoCredentialsError
-from typing import Dict, Any, Optional
-from dotenv import load_dotenv
-from pathlib import Path
+from botocore.exceptions import ClientError
+from typing import Dict, Any
 from get_sso_credentials import get_aws_sso_credentials
 from utils.common_utils import load_config_from_env
 
