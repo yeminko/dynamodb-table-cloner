@@ -5,14 +5,14 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from models.environment_config import EnvironmentConfig
+from models.sso_config import SSOConfig
 from models.role_credentials import RoleCredentials
-from utils.common_utils import load_config_from_env
+from utils.common_utils import load_sso_config_from_env
 
 
 def main():
     """Retrieve and print AWS SSO credentials to stdout."""
-    config: EnvironmentConfig = _load_config()
+    config: SSOConfig = _load_config()
 
     credentials: RoleCredentials | None = get_aws_sso_credentials(config)
     if credentials:
@@ -25,7 +25,7 @@ def main():
         print("❌ Failed to retrieve credentials")
 
 
-def get_aws_sso_credentials(config: EnvironmentConfig) -> RoleCredentials | None:
+def get_aws_sso_credentials(config: SSOConfig) -> RoleCredentials | None:
     """Authenticate via AWS SSO and return temporary role credentials, or None on failure."""
 
     if not _ensure_valid_sso_token(config):
@@ -39,7 +39,7 @@ def get_aws_sso_credentials(config: EnvironmentConfig) -> RoleCredentials | None
     return _fetch_role_credentials(config, access_token)
 
 
-def _ensure_valid_sso_token(config: EnvironmentConfig) -> bool:
+def _ensure_valid_sso_token(config: SSOConfig) -> bool:
     """Check SSO token expiry and trigger login if needed. Returns False on unrecoverable error."""
     should_login = False
     try:
@@ -65,10 +65,10 @@ def _ensure_valid_sso_token(config: EnvironmentConfig) -> bool:
     return True
 
 
-def _load_config() -> EnvironmentConfig:
+def _load_config() -> SSOConfig:
     """Load configuration from .env file."""
     try:
-        config: EnvironmentConfig = load_config_from_env()
+        config: SSOConfig = load_sso_config_from_env()
         print("✓ Configuration loaded successfully")
         return config
     except (FileNotFoundError, ValueError) as e:
@@ -106,7 +106,7 @@ def _get_latest_sso_cache_file() -> Path:
     return max(json_files, key=lambda f: f.stat().st_mtime)
 
 
-def _fetch_role_credentials(config: EnvironmentConfig, access_token: str) -> RoleCredentials | None:
+def _fetch_role_credentials(config: SSOConfig, access_token: str) -> RoleCredentials | None:
     """Call the AWS CLI to fetch role credentials and return them."""
     try:
         result = subprocess.run(
@@ -137,7 +137,7 @@ def _fetch_role_credentials(config: EnvironmentConfig, access_token: str) -> Rol
         return None
 
 
-def _run_sso_login(config: EnvironmentConfig) -> None:
+def _run_sso_login(config: SSOConfig) -> None:
     print(f"🔐 Running AWS SSO login for profile '{config.aws_sso_profile}'...")
     try:
         subprocess.run(["aws", "sso", "login", "--profile",

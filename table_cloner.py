@@ -5,7 +5,7 @@ This script clones a table from cloud DynamoDB to local DynamoDB.
 It automatically retrieves AWS credentials via SSO and uses configuration from .env file.
 """
 from models.role_credentials import RoleCredentials
-from models.environment_config import EnvironmentConfig
+from models.all_config import AllConfig
 from mypy_boto3_dynamodb.type_defs import DescribeTableOutputTypeDef, TableDescriptionTypeDef
 
 import boto3
@@ -14,7 +14,7 @@ import sys
 from botocore.exceptions import ClientError
 from typing import Dict, Any
 from get_sso_credentials import get_aws_sso_credentials
-from utils.common_utils import load_config_from_env
+from utils.common_utils import load_all_config_from_env
 
 from mypy_boto3_dynamodb import DynamoDBClient
 
@@ -67,7 +67,7 @@ class DynamoDBTableCloner:
     def _load_config(self) -> None:
         """Load configuration from .env file."""
         try:
-            self.config: EnvironmentConfig = load_config_from_env()
+            self.config: AllConfig = load_all_config_from_env()
             print("✓ Configuration loaded successfully")
         except (FileNotFoundError, ValueError) as e:
             print(f"❌ Configuration error: {e}")

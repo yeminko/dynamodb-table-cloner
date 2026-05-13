@@ -97,7 +97,7 @@ If you need to get AWS SSO credentials:
 python get_sso_credentials.py
 ```
 
-This will print the credentials in JSON format.
+This will print the credentials as JSON.
 
 ## Configuration Reference
 

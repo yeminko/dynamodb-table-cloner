@@ -4,7 +4,7 @@ DynamoDB Table Lister
 This script lists all tables in cloud DynamoDB across different regions.
 It automatically retrieves AWS credentials via SSO and uses configuration from .env file.
 """
-from models.environment_config import EnvironmentConfig
+from models.sso_config import SSOConfig
 from models.role_credentials import RoleCredentials
 
 import boto3
@@ -18,7 +18,7 @@ from mypy_boto3_dynamodb import DynamoDBClient
 
 from get_sso_credentials import get_aws_sso_credentials
 
-from utils.common_utils import load_config_from_env
+from utils.common_utils import load_sso_config_from_env
 
 
 class DynamoDBTableLister:
@@ -192,7 +192,7 @@ class DynamoDBTableLister:
     def _load_config(self) -> None:
         """Load configuration from .env file."""
         try:
-            self.config: EnvironmentConfig = load_config_from_env()
+            self.config: SSOConfig = load_sso_config_from_env()
             print("✓ Configuration loaded successfully")
         except (FileNotFoundError, ValueError) as e:
             print(f"❌ Configuration error: {e}")
