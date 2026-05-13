@@ -15,6 +15,7 @@ from botocore.exceptions import ClientError
 from typing import Dict, Any
 from get_sso_credentials import get_aws_sso_credentials
 from utils.common_utils import load_all_config_from_env
+from models.sso_config import SSOConfig
 
 from mypy_boto3_dynamodb import DynamoDBClient
 
@@ -76,8 +77,16 @@ class DynamoDBTableCloner:
     def _load_credentials(self) -> None:
         """Load AWS credentials using SSO."""
         print("🔐 Getting AWS credentials via SSO...")
+
+        sso_config = SSOConfig(
+            aws_sso_profile=self.config.aws_sso_profile,
+            aws_account_id=self.config.aws_account_id,
+            aws_role_name=self.config.aws_role_name,
+            aws_region=self.config.aws_region
+        )
+
         role_credentials: RoleCredentials | None = get_aws_sso_credentials(
-            self.config)
+            sso_config)
         if not role_credentials:
             print("❌ Error: Failed to get credentials via SSO")
             sys.exit(1)
@@ -225,7 +234,11 @@ class DynamoDBTableCloner:
         except ClientError as e:
             if e.response['Error']['Code'] == 'ResourceInUseException':
                 print(
-                    f"⚠️  Table '{target_table_name}' already exists in local DynamoDB")
+                    f"❌ Table '{target_table_name}' already exists in local DynamoDB")
+                print(
+                    "Please choose a different target table name or delete the existing table.")
+                sys.exit(1)
+
             else:
                 print(f"❌ Error creating local table: {e}")
                 sys.exit(1)

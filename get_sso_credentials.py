@@ -23,6 +23,7 @@ def main():
         print("=" * 60)
     else:
         print("❌ Failed to retrieve credentials")
+        sys.exit(1)
 
 
 def get_aws_sso_credentials(config: SSOConfig) -> RoleCredentials | None:
