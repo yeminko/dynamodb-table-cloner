@@ -65,6 +65,48 @@ class DynamoDBTableCloner:
         print(
             f"✅ Table '{source_table_name}' has been cloned to '{target_table_name}' in local DynamoDB")
 
+    def clone_tables_with_prefix(self, prefix: str) -> None:
+        """
+        Clone all tables from cloud DynamoDB that start with the given prefix.
+
+        Args:
+            prefix (str): Prefix to filter tables (e.g., "dev_")
+        """
+        print(
+            f"🚀 Starting batch table cloning process for prefix '{prefix}'")
+
+        try:
+            # List all tables in cloud DynamoDB
+            paginator = self.cloud_client.get_paginator('list_tables')
+            page_iterator = paginator.paginate()
+
+            all_tables = []
+            for page in page_iterator:
+                all_tables.extend(page.get('TableNames', []))
+
+            # Filter tables by prefix
+            tables_to_clone = [
+                table_name for table_name in all_tables if table_name.startswith(prefix)]
+
+            if not tables_to_clone:
+                print(
+                    f"❌ No tables found with prefix '{prefix}' in cloud DynamoDB.")
+                return
+
+            print(
+                f"🔍 Found {len(tables_to_clone)} tables with prefix '{prefix}' in {self.config.aws_region}")
+
+            for table_name in tables_to_clone:
+                print(f"📋 {table_name}")
+
+            # Clone each table
+            for source_table_name in tables_to_clone:
+                self.clone_table(source_table_name)
+
+        except ClientError as e:
+            print(f"❌ Error listing tables: {e}")
+            sys.exit(1)
+
     def _load_config(self) -> None:
         """Load configuration from .env file."""
         try:
@@ -358,22 +400,43 @@ def main():
         description='Clone a DynamoDB table from cloud to local DynamoDB'
     )
     parser.add_argument(
-        'table_name',
+        "name",
+        nargs='?',
         help='Name of the source table to clone (e.g., "dev_users")'
     )
     parser.add_argument(
-        '--name',
+        '--target-table',
         help='Custom table name for the local DynamoDB (overrides default naming convention)'
+    )
+    parser.add_argument(
+        '--prefix',
+        help='Clone all tables with the provided prefix from a single region (e.g., "dev_")'
     )
 
     args = parser.parse_args()
 
+    if not args.name and not args.prefix:
+        parser.error(
+            "You must provide either a table name to clone or a prefix to clone multiple tables. Use --help for more information.")
+
+    if args.name and args.prefix:
+        parser.error(
+            "You cannot use both a table name and a prefix at the same time. Please choose one option.")
+
+    if args.prefix and args.target_table:
+        parser.error(
+            "You cannot use --target-table with --prefix. --target-table only applies when cloning a single table.")
+
     # Initialize the cloner (reads from .env automatically)
     cloner = DynamoDBTableCloner()
 
-    # Run the cloner with the provided table name
-    cloner.clone_table(source_table_name=args.table_name,
-                       custom_table_name=args.name)
+    if args.prefix:
+        # Clone all tables with the specified prefix
+        cloner.clone_tables_with_prefix(args.prefix)
+    else:
+        # Run the cloner with the provided table name
+        cloner.clone_table(source_table_name=args.name,
+                           custom_table_name=args.target_table)
 
 
 if __name__ == "__main__":
