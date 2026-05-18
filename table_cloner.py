@@ -76,22 +76,22 @@ class DynamoDBTableCloner:
             f"🚀 Starting batch table cloning process for prefix '{prefix}'")
 
         try:
-            # List all tables in cloud DynamoDB
+            # List and filter tables in cloud DynamoDB during pagination
             paginator = self.cloud_client.get_paginator('list_tables')
             page_iterator = paginator.paginate()
 
-            all_tables = []
+            tables_to_clone = []
             for page in page_iterator:
-                all_tables.extend(page.get('TableNames', []))
-
-            # Filter tables by prefix
-            tables_to_clone = [
-                table_name for table_name in all_tables if table_name.startswith(prefix)]
+                tables_to_clone.extend(
+                    table_name
+                    for table_name in page.get('TableNames', [])
+                    if table_name.startswith(prefix)
+                )
 
             if not tables_to_clone:
                 print(
                     f"❌ No tables found with prefix '{prefix}' in cloud DynamoDB.")
-                return
+                sys.exit(1)
 
             print(
                 f"🔍 Found {len(tables_to_clone)} tables with prefix '{prefix}' in {self.config.aws_region}")
@@ -99,9 +99,21 @@ class DynamoDBTableCloner:
             for table_name in tables_to_clone:
                 print(f"📋 {table_name}")
 
+            successful_tables = []
+            failed_tables = []
+
             # Clone each table
             for source_table_name in tables_to_clone:
-                self.clone_table(source_table_name)
+                try:
+                    self.clone_table(source_table_name)
+                    successful_tables.append(source_table_name)
+                except ValueError as e:
+                    print(f"❌ Error cloning table '{source_table_name}': {e}")
+                    failed_tables.append(source_table_name)
+
+            print(f"✅ Successfully cloned tables: {successful_tables}")
+            if failed_tables:
+                print(f"❌ Failed to clone tables: {failed_tables}")
 
         except ClientError as e:
             print(f"❌ Error listing tables: {e}")
@@ -213,11 +225,10 @@ class DynamoDBTableCloner:
             return response['Table']
         except ClientError as e:
             if e.response['Error']['Code'] == 'ResourceNotFoundException':
-                print(
-                    f"❌ Error: Table '{table_name}' not found in cloud DynamoDB.")
+                raise ValueError(
+                    f"Source table '{table_name}' does not exist in cloud DynamoDB.")
             else:
-                print(f"❌ Error describing table: {e}")
-            sys.exit(1)
+                raise ValueError(f"Error describing table '{table_name}': {e}")
 
     def _create_local_table(self, source_schema: TableDescriptionTypeDef, target_table_name: str) -> None:
         """
@@ -275,15 +286,12 @@ class DynamoDBTableCloner:
 
         except ClientError as e:
             if e.response['Error']['Code'] == 'ResourceInUseException':
-                print(
-                    f"❌ Table '{target_table_name}' already exists in local DynamoDB")
-                print(
-                    "Please choose a different target table name or delete the existing table.")
-                sys.exit(1)
+                raise ValueError(
+                    f"Target table '{target_table_name}' already exists in local DynamoDB.")
 
             else:
-                print(f"❌ Error creating local table: {e}")
-                sys.exit(1)
+                raise ValueError(
+                    f"Error creating local table '{target_table_name}': {e}")
 
     def _copy_table_data(self, source_table_name: str, target_table_name: str) -> None:
         """
@@ -332,8 +340,8 @@ class DynamoDBTableCloner:
                 f"✅ Successfully migrated {item_count} items to '{target_table_name}'")
 
         except ClientError as e:
-            print(f"❌ Error copying table data: {e}")
-            sys.exit(1)
+            raise ValueError(
+                f"Error copying table data from '{source_table_name}' to '{target_table_name}': {e}")
 
     def _write_batch(self, table_name: str, batch_items: list) -> None:
         """
@@ -360,8 +368,8 @@ class DynamoDBTableCloner:
                 unprocessed = response.get('UnprocessedItems', {})
 
         except ClientError as e:
-            print(f"❌ Error writing batch: {e}")
-            raise
+            raise ValueError(
+                f"Error writing batch to table '{table_name}': {e}")
 
     def _generate_target_table_name(self, source_table_name: str) -> str:
         """
@@ -380,7 +388,7 @@ class DynamoDBTableCloner:
         Returns:
             str: Target table name with local prefix
         """
-        # Environment prefixes to replace (as specified in requirements)
+        # Environment prefixes to replace
         env_prefixes = ['dev_', 'qa_', 'stg_', 'test_']
 
         # Check if the table name starts with any environment prefix
@@ -397,7 +405,7 @@ class DynamoDBTableCloner:
 def main():
     """Main function to run the table cloner."""
     parser = argparse.ArgumentParser(
-        description='Clone a DynamoDB table from cloud to local DynamoDB'
+        description='Clone single or multiple DynamoDB tables from cloud to local based on table name or prefix.'
     )
     parser.add_argument(
         "name",
@@ -426,6 +434,9 @@ def main():
     if args.prefix and args.target_table:
         parser.error(
             "You cannot use --target-table with --prefix. --target-table only applies when cloning a single table.")
+
+    if args.prefix and args.prefix.strip() == "":
+        parser.error("Prefix cannot be empty. Please provide a valid prefix.")
 
     # Initialize the cloner (reads from .env automatically)
     cloner = DynamoDBTableCloner()
