@@ -118,7 +118,9 @@ class DynamoDBTableCloner:
 
             print(f"✅ Successfully cloned tables: {successful_tables}")
             if failed_tables:
-                print(f"❌ Failed to clone tables: {failed_tables}")
+                raise RuntimeError(
+                    f"Failed to clone {len(failed_tables)} table(s) with prefix '{prefix}': {failed_tables}"
+                )
 
         except ClientError as e:
             raise RuntimeError(
@@ -346,7 +348,7 @@ class DynamoDBTableCloner:
             print(
                 f"✅ Successfully migrated {item_count} items to '{target_table_name}'")
 
-        except ClientError as e:
+        except (ClientError, ValueError) as e:
             raise ValueError(
                 f"Error copying table data from '{source_table_name}' to '{target_table_name}': {e}") from e
 
