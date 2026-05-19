@@ -96,7 +96,7 @@ class DynamoDBTableCloner:
 
             if not tables_to_clone:
                 raise ValueError(
-                    f"❌ No tables found with prefix '{prefix}' in cloud DynamoDB.")
+                    f"No tables found with prefix '{prefix}' in cloud DynamoDB.")
 
             print(
                 f"🔍 Found {len(tables_to_clone)} tables with prefix '{prefix}' in {self.config.aws_region}")
@@ -112,11 +112,13 @@ class DynamoDBTableCloner:
                 try:
                     self.clone_table(source_table_name)
                     successful_tables.append(source_table_name)
-                except ValueError as e:
+                except Exception as e:
                     print(f"❌ Error cloning table '{source_table_name}': {e}")
                     failed_tables.append(source_table_name)
 
-            print(f"✅ Successfully cloned tables: {successful_tables}")
+            print(
+                f"✅ Successfully cloned {len(successful_tables)} table(s) with prefix '{prefix}'")
+
             if failed_tables:
                 raise RuntimeError(
                     f"Failed to clone {len(failed_tables)} table(s) with prefix '{prefix}': {failed_tables}"
