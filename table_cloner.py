@@ -125,8 +125,12 @@ class DynamoDBTableCloner:
                 )
 
         except ClientError as e:
+            error_details = e.response.get("Error", {})
+            error_code = error_details.get("Code", "Unknown")
+            error_message = error_details.get("Message", str(e))
             raise RuntimeError(
-                f"Error listing tables with prefix '{prefix}'"
+                f"Error listing tables with prefix '{prefix}': "
+                f"{error_code} - {error_message}"
             ) from e
 
     def _load_config(self) -> None:
@@ -235,10 +239,10 @@ class DynamoDBTableCloner:
             return response['Table']
         except ClientError as e:
             if e.response['Error']['Code'] == 'ResourceNotFoundException':
-                raise ValueError(
+                raise RuntimeError(
                     f"Source table '{table_name}' does not exist in cloud DynamoDB.") from e
             else:
-                raise ValueError(
+                raise RuntimeError(
                     f"Error describing table '{table_name}': {e}") from e
 
     def _create_local_table(self, source_schema: TableDescriptionTypeDef, target_table_name: str) -> None:
@@ -297,11 +301,11 @@ class DynamoDBTableCloner:
 
         except ClientError as e:
             if e.response['Error']['Code'] == 'ResourceInUseException':
-                raise ValueError(
+                raise RuntimeError(
                     f"Target table '{target_table_name}' already exists in local DynamoDB.") from e
 
             else:
-                raise ValueError(
+                raise RuntimeError(
                     f"Error creating local table '{target_table_name}': {e}") from e
 
     def _copy_table_data(self, source_table_name: str, target_table_name: str) -> None:
@@ -351,7 +355,7 @@ class DynamoDBTableCloner:
                 f"✅ Successfully migrated {item_count} items to '{target_table_name}'")
 
         except (ClientError, ValueError) as e:
-            raise ValueError(
+            raise RuntimeError(
                 f"Error copying table data from '{source_table_name}' to '{target_table_name}': {e}") from e
 
     def _write_batch(self, table_name: str, batch_items: list) -> None:
@@ -379,8 +383,11 @@ class DynamoDBTableCloner:
                 unprocessed = response.get('UnprocessedItems', {})
 
         except ClientError as e:
-            raise ValueError(
-                f"Error writing batch to table '{table_name}': {e}") from e
+            error_details = e.response.get("Error", {})
+            error_code = error_details.get("Code", "Unknown")
+            error_message = error_details.get("Message", str(e))
+            raise RuntimeError(
+                f"Error writing batch to table '{table_name}': {error_code} - {error_message}") from e
 
     def _generate_target_table_name(self, source_table_name: str) -> str:
         """
@@ -419,7 +426,7 @@ def main():
         description='Clone single or multiple DynamoDB tables from cloud to local based on table name or prefix.'
     )
     parser.add_argument(
-        "name",
+        "source_table",
         nargs='?',
         help='Name of the source table to clone (e.g., "dev_users")'
     )
@@ -434,11 +441,11 @@ def main():
 
     args = parser.parse_args()
 
-    if not args.name and not args.prefix:
+    if not args.source_table and not args.prefix:
         parser.error(
             "You must provide either a table name to clone or a prefix to clone multiple tables. Use --help for more information.")
 
-    if args.name and args.prefix:
+    if args.source_table and args.prefix:
         parser.error(
             "You cannot use both a table name and a prefix at the same time. Please choose one option.")
 
@@ -459,7 +466,7 @@ def main():
             cloner.clone_tables_with_prefix(args.prefix)
         else:
             # Run the cloner with the provided table name
-            cloner.clone_table(source_table_name=args.name,
+            cloner.clone_table(source_table_name=args.source_table,
                                custom_table_name=args.target_table)
     except Exception as e:
         print(f"❌ Error: {e}")
