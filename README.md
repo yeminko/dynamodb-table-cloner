@@ -72,9 +72,9 @@ python table_cloner.py --prefix dev_
 
 #### Example
 
- If your `LOCAL_TABLE_PREFIX` is `local_`, then `dev_users` will be cloned to `local_users`.
+- If your `LOCAL_TABLE_PREFIX` is `local_`, then `dev_users` will be cloned to `local_users`.
 
- If the table name does not start with any of the environment prefixes (`dev_`, `qa_`, `stg_`, `test_`), it will be cloned with the same name (e.g., `users` → `local_users`).
+- If the table name does not start with any of the environment prefixes (`dev_`, `qa_`, `stg_`, `test_`), it will be cloned by prepending the local prefix to the original name (e.g., `users` → `local_users`).
 
 ### Discover Tables
 

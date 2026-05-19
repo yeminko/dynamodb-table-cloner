@@ -72,6 +72,12 @@ class DynamoDBTableCloner:
         Args:
             prefix (str): Prefix to filter tables (e.g., "dev_")
         """
+
+        if not isinstance(prefix, str) or not prefix.strip():
+            raise ValueError(
+                "Prefix must be a non-empty, non-whitespace string.")
+
+        prefix = prefix.strip()
         print(
             f"🚀 Starting batch table cloning process for prefix '{prefix}'")
 
@@ -89,9 +95,8 @@ class DynamoDBTableCloner:
                 )
 
             if not tables_to_clone:
-                print(
+                raise ValueError(
                     f"❌ No tables found with prefix '{prefix}' in cloud DynamoDB.")
-                sys.exit(1)
 
             print(
                 f"🔍 Found {len(tables_to_clone)} tables with prefix '{prefix}' in {self.config.aws_region}")
@@ -116,8 +121,9 @@ class DynamoDBTableCloner:
                 print(f"❌ Failed to clone tables: {failed_tables}")
 
         except ClientError as e:
-            print(f"❌ Error listing tables: {e}")
-            sys.exit(1)
+            raise RuntimeError(
+                f"Error listing tables with prefix '{prefix}'"
+            ) from e
 
     def _load_config(self) -> None:
         """Load configuration from .env file."""
@@ -226,9 +232,10 @@ class DynamoDBTableCloner:
         except ClientError as e:
             if e.response['Error']['Code'] == 'ResourceNotFoundException':
                 raise ValueError(
-                    f"Source table '{table_name}' does not exist in cloud DynamoDB.")
+                    f"Source table '{table_name}' does not exist in cloud DynamoDB.") from e
             else:
-                raise ValueError(f"Error describing table '{table_name}': {e}")
+                raise ValueError(
+                    f"Error describing table '{table_name}': {e}") from e
 
     def _create_local_table(self, source_schema: TableDescriptionTypeDef, target_table_name: str) -> None:
         """
@@ -287,11 +294,11 @@ class DynamoDBTableCloner:
         except ClientError as e:
             if e.response['Error']['Code'] == 'ResourceInUseException':
                 raise ValueError(
-                    f"Target table '{target_table_name}' already exists in local DynamoDB.")
+                    f"Target table '{target_table_name}' already exists in local DynamoDB.") from e
 
             else:
                 raise ValueError(
-                    f"Error creating local table '{target_table_name}': {e}")
+                    f"Error creating local table '{target_table_name}': {e}") from e
 
     def _copy_table_data(self, source_table_name: str, target_table_name: str) -> None:
         """
@@ -341,7 +348,7 @@ class DynamoDBTableCloner:
 
         except ClientError as e:
             raise ValueError(
-                f"Error copying table data from '{source_table_name}' to '{target_table_name}': {e}")
+                f"Error copying table data from '{source_table_name}' to '{target_table_name}': {e}") from e
 
     def _write_batch(self, table_name: str, batch_items: list) -> None:
         """
@@ -369,7 +376,7 @@ class DynamoDBTableCloner:
 
         except ClientError as e:
             raise ValueError(
-                f"Error writing batch to table '{table_name}': {e}")
+                f"Error writing batch to table '{table_name}': {e}") from e
 
     def _generate_target_table_name(self, source_table_name: str) -> str:
         """
@@ -435,19 +442,24 @@ def main():
         parser.error(
             "You cannot use --target-table with --prefix. --target-table only applies when cloning a single table.")
 
-    if args.prefix and args.prefix.strip() == "":
+    if args.prefix and not args.prefix.strip():
         parser.error("Prefix cannot be empty. Please provide a valid prefix.")
 
     # Initialize the cloner (reads from .env automatically)
     cloner = DynamoDBTableCloner()
 
-    if args.prefix:
-        # Clone all tables with the specified prefix
-        cloner.clone_tables_with_prefix(args.prefix)
-    else:
-        # Run the cloner with the provided table name
-        cloner.clone_table(source_table_name=args.name,
-                           custom_table_name=args.target_table)
+    try:
+
+        if args.prefix:
+            # Clone all tables with the specified prefix
+            cloner.clone_tables_with_prefix(args.prefix)
+        else:
+            # Run the cloner with the provided table name
+            cloner.clone_table(source_table_name=args.name,
+                               custom_table_name=args.target_table)
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
