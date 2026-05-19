@@ -63,10 +63,18 @@ Clone tables by name. This will clone both schema and data, renaming the table w
 python table_cloner.py dev_users
 
 # Clone a table with custom table name
-python table_cloner.py dev_users --name my_users
+python table_cloner.py dev_users --target-table my_users
+
+# Clone multiple tables with a prefix
+# This will clone all tables starting with 'dev_' from configured region (.env AWS_REGION)
+python table_cloner.py --prefix dev_
 ```
 
-**Example**: If your `LOCAL_TABLE_PREFIX` is `local_`, then `dev_users` will be cloned to `local_users`.
+#### Example
+
+- If your `LOCAL_TABLE_PREFIX` is `local_`, then `dev_users` will be cloned to `local_users`.
+
+- If the table name does not start with any of the environment prefixes (`dev_`, `qa_`, `stg_`, `test_`), it will be cloned by prepending the local prefix to the original name (e.g., `users` → `local_users`).
 
 ### Discover Tables
 
