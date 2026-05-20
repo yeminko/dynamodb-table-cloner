@@ -86,9 +86,6 @@ class DynamoDBTableCloner:
     def clone_all_tables(self) -> None:
         """
         Clone all tables from cloud DynamoDB to local DynamoDB based on the region specified in .env file.
-
-        Args:
-            None
         """
 
         print(
@@ -385,18 +382,12 @@ class DynamoDBTableCloner:
     def _clone_multi_tables(self, prefix: str | None) -> None:
         """
         Clone all tables from cloud DynamoDB that start with the given prefix.
-        If prefix is empty or None, it will clone all tables in the region specified in .env file.
+        If prefix is None, it will clone all tables in the region specified in .env file.
+        Empty or whitespace-only prefixes are invalid and will raise a ValueError.
 
         Args:
-            prefix (str | None): Prefix to filter tables (e.g., "dev_")
+            prefix (str | None): Prefix to filter tables (e.g., "dev_"), or None to clone all tables
         """
-
-        if prefix is not None and (not isinstance(prefix, str) or not prefix.strip()):
-            raise ValueError(
-                "Prefix must be a non-empty, non-whitespace string if provided.")
-
-        if prefix is not None:
-            prefix = prefix.strip()
 
         try:
             # List and filter tables in cloud DynamoDB during pagination
@@ -455,9 +446,13 @@ class DynamoDBTableCloner:
             error_details = e.response.get("Error", {})
             error_code = error_details.get("Code", "Unknown")
             error_message = error_details.get("Message", str(e))
+            listing_context = (
+                f"Error listing tables with prefix '{prefix}'"
+                if prefix else
+                f"Error listing tables in {self.config.aws_region}"
+            )
             raise RuntimeError(
-                f"Error listing tables with prefix '{prefix}': "
-                f"{error_code} - {error_message}"
+                f"{listing_context}: {error_code} - {error_message}"
             ) from e
 
 
