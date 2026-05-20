@@ -68,6 +68,9 @@ python table_cloner.py dev_users --target-table my_users
 # Clone multiple tables with a prefix
 # This will clone all tables starting with 'dev_' from configured region (.env AWS_REGION)
 python table_cloner.py --prefix dev_
+
+# Clone all tables from configured region (.env AWS_REGION)
+python table_cloner.py --all
 ```
 
 #### Example

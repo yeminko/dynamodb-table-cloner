@@ -133,6 +133,64 @@ class DynamoDBTableCloner:
                 f"{error_code} - {error_message}"
             ) from e
 
+    def clone_all_tables(self) -> None:
+        """
+        Clone all tables from cloud DynamoDB to local DynamoDB based on the region specified in .env file.
+
+        Args:
+            None
+        """
+
+        print(
+            f"🚀 Starting batch table cloning process for all tables")
+
+        try:
+            # List and filter tables in cloud DynamoDB during pagination
+            paginator = self.cloud_client.get_paginator('list_tables')
+            page_iterator = paginator.paginate()
+
+            tables_to_clone = []
+            for page in page_iterator:
+                tables_to_clone.extend(page.get('TableNames', []))
+
+            if not tables_to_clone:
+                raise ValueError(
+                    f"No tables found in cloud DynamoDB.")
+            print(
+                f"🔍 Found {len(tables_to_clone)} tables in {self.config.aws_region}")
+
+            for table_name in tables_to_clone:
+                print(f"📋 {table_name}")
+
+            successful_tables = []
+            failed_tables = []
+
+            # Clone each table
+            for source_table_name in tables_to_clone:
+                try:
+                    self.clone_table(source_table_name)
+                    successful_tables.append(source_table_name)
+                except Exception as e:
+                    print(f"❌ Error cloning table '{source_table_name}': {e}")
+                    failed_tables.append(source_table_name)
+
+            print(
+                f"✅ Successfully cloned {len(successful_tables)} table(s)")
+
+            if failed_tables:
+                raise RuntimeError(
+                    f"Failed to clone {len(failed_tables)} table(s): {failed_tables}"
+                )
+
+        except ClientError as e:
+            error_details = e.response.get("Error", {})
+            error_code = error_details.get("Code", "Unknown")
+            error_message = error_details.get("Message", str(e))
+            raise RuntimeError(
+                f"Error listing tables: "
+                f"{error_code} - {error_message}"
+            ) from e
+
     def _load_config(self) -> None:
         """Load configuration from .env file."""
         try:
@@ -438,12 +496,17 @@ def main():
         '--prefix',
         help='Clone all tables with the provided prefix from a single region (e.g., "dev_")'
     )
+    parser.add_argument(
+        '--all',
+        help='Clone all tables from the specified region in .env)',
+        action='store_true'
+    )
 
     args = parser.parse_args()
 
-    if not args.source_table and not args.prefix:
+    if not args.source_table and not args.prefix and not args.all:
         parser.error(
-            "You must provide either a table name to clone or a prefix to clone multiple tables. Use --help for more information.")
+            "You must provide either a table name to clone, a prefix to clone multiple tables, or use --all to clone all tables. Use --help for more information.")
 
     if args.source_table and args.prefix:
         parser.error(
@@ -456,12 +519,19 @@ def main():
     if args.prefix and not args.prefix.strip():
         parser.error("Prefix cannot be empty. Please provide a valid prefix.")
 
+    if args.all and (args.source_table or args.prefix or args.target_table):
+        parser.error(
+            "You cannot use --all with other options. --all clones all tables in the region specified in .env.")
+
     # Initialize the cloner (reads from .env automatically)
     cloner = DynamoDBTableCloner()
 
     try:
 
-        if args.prefix:
+        if args.all:
+            # Clone all tables in the region specified in .env
+            cloner.clone_all_tables()
+        elif args.prefix:
             # Clone all tables with the specified prefix
             cloner.clone_tables_with_prefix(args.prefix)
         else:
