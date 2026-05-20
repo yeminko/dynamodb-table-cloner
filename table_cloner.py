@@ -81,57 +81,7 @@ class DynamoDBTableCloner:
         print(
             f"🚀 Starting batch table cloning process for prefix '{prefix}'")
 
-        try:
-            # List and filter tables in cloud DynamoDB during pagination
-            paginator = self.cloud_client.get_paginator('list_tables')
-            page_iterator = paginator.paginate()
-
-            tables_to_clone = []
-            for page in page_iterator:
-                tables_to_clone.extend(
-                    table_name
-                    for table_name in page.get('TableNames', [])
-                    if table_name.startswith(prefix)
-                )
-
-            if not tables_to_clone:
-                raise ValueError(
-                    f"No tables found with prefix '{prefix}' in cloud DynamoDB.")
-
-            print(
-                f"🔍 Found {len(tables_to_clone)} tables with prefix '{prefix}' in {self.config.aws_region}")
-
-            for table_name in tables_to_clone:
-                print(f"📋 {table_name}")
-
-            successful_tables = []
-            failed_tables = []
-
-            # Clone each table
-            for source_table_name in tables_to_clone:
-                try:
-                    self.clone_table(source_table_name)
-                    successful_tables.append(source_table_name)
-                except Exception as e:
-                    print(f"❌ Error cloning table '{source_table_name}': {e}")
-                    failed_tables.append(source_table_name)
-
-            print(
-                f"✅ Successfully cloned {len(successful_tables)} table(s) with prefix '{prefix}'")
-
-            if failed_tables:
-                raise RuntimeError(
-                    f"Failed to clone {len(failed_tables)} table(s) with prefix '{prefix}': {failed_tables}"
-                )
-
-        except ClientError as e:
-            error_details = e.response.get("Error", {})
-            error_code = error_details.get("Code", "Unknown")
-            error_message = error_details.get("Message", str(e))
-            raise RuntimeError(
-                f"Error listing tables with prefix '{prefix}': "
-                f"{error_code} - {error_message}"
-            ) from e
+        self._clone_multi_tables(prefix)
 
     def clone_all_tables(self) -> None:
         """
@@ -144,52 +94,7 @@ class DynamoDBTableCloner:
         print(
             f"🚀 Starting batch table cloning process for all tables")
 
-        try:
-            # List and filter tables in cloud DynamoDB during pagination
-            paginator = self.cloud_client.get_paginator('list_tables')
-            page_iterator = paginator.paginate()
-
-            tables_to_clone = []
-            for page in page_iterator:
-                tables_to_clone.extend(page.get('TableNames', []))
-
-            if not tables_to_clone:
-                raise ValueError(
-                    f"No tables found in cloud DynamoDB.")
-            print(
-                f"🔍 Found {len(tables_to_clone)} tables in {self.config.aws_region}")
-
-            for table_name in tables_to_clone:
-                print(f"📋 {table_name}")
-
-            successful_tables = []
-            failed_tables = []
-
-            # Clone each table
-            for source_table_name in tables_to_clone:
-                try:
-                    self.clone_table(source_table_name)
-                    successful_tables.append(source_table_name)
-                except Exception as e:
-                    print(f"❌ Error cloning table '{source_table_name}': {e}")
-                    failed_tables.append(source_table_name)
-
-            print(
-                f"✅ Successfully cloned {len(successful_tables)} table(s)")
-
-            if failed_tables:
-                raise RuntimeError(
-                    f"Failed to clone {len(failed_tables)} table(s): {failed_tables}"
-                )
-
-        except ClientError as e:
-            error_details = e.response.get("Error", {})
-            error_code = error_details.get("Code", "Unknown")
-            error_message = error_details.get("Message", str(e))
-            raise RuntimeError(
-                f"Error listing tables: "
-                f"{error_code} - {error_message}"
-            ) from e
+        self._clone_multi_tables(prefix=None)
 
     def _load_config(self) -> None:
         """Load configuration from .env file."""
@@ -256,7 +161,7 @@ class DynamoDBTableCloner:
         """Test the connection to cloud DynamoDB."""
         try:
             # Try to list tables to verify credentials work
-            response = self.cloud_client.list_tables(Limit=1)
+            self.cloud_client.list_tables(Limit=1)
             print("✓ Successfully connected to cloud DynamoDB")
         except ClientError as e:
             if e.response['Error']['Code'] == 'UnrecognizedClientException':
@@ -274,7 +179,7 @@ class DynamoDBTableCloner:
         """Test the connection to local DynamoDB."""
         try:
             # Try to list tables to verify local DynamoDB is running
-            response = self.local_client.list_tables(Limit=1)
+            self.local_client.list_tables(Limit=1)
             print("✓ Successfully connected to local DynamoDB")
         except Exception as e:
             print(f"❌ Error connecting to local DynamoDB: {e}")
@@ -477,6 +382,84 @@ class DynamoDBTableCloner:
         # If no environment prefix found, just add local prefix
         return f"{self.config.local_table_prefix}{source_table_name}"
 
+    def _clone_multi_tables(self, prefix: str | None) -> None:
+        """
+        Clone all tables from cloud DynamoDB that start with the given prefix.
+        If prefix is empty or None, it will clone all tables in the region specified in .env file.
+
+        Args:
+            prefix (str | None): Prefix to filter tables (e.g., "dev_")
+        """
+
+        if prefix is not None and (not isinstance(prefix, str) or not prefix.strip()):
+            raise ValueError(
+                "Prefix must be a non-empty, non-whitespace string if provided.")
+
+        if prefix is not None:
+            prefix = prefix.strip()
+
+        try:
+            # List and filter tables in cloud DynamoDB during pagination
+            paginator = self.cloud_client.get_paginator('list_tables')
+            page_iterator = paginator.paginate()
+
+            tables_to_clone = []
+            for page in page_iterator:
+                tables_to_clone.extend(
+                    table_name
+                    for table_name in page.get('TableNames', [])
+                    if prefix is None or table_name.startswith(prefix)
+                )
+
+            if not tables_to_clone:
+                raise ValueError(
+                    f"No tables found with prefix '{prefix}' in cloud DynamoDB."
+                    if prefix else "No tables found in cloud DynamoDB."
+                )
+
+            print(
+                f"🔍 Found {len(tables_to_clone)} tables " +
+                (f"with prefix '{prefix}' " if prefix else "") +
+                f"in {self.config.aws_region}"
+            )
+
+            for table_name in tables_to_clone:
+                print(f"📋 {table_name}")
+
+            successful_tables = []
+            failed_tables = []
+
+            # Clone each table
+            for source_table_name in tables_to_clone:
+                try:
+                    self.clone_table(source_table_name)
+                    successful_tables.append(source_table_name)
+                except Exception as e:
+                    print(f"❌ Error cloning table '{source_table_name}': {e}")
+                    failed_tables.append(source_table_name)
+
+            print(
+                f"✅ Successfully cloned {len(successful_tables)} table(s) " +
+                (f"with prefix '{prefix}' " if prefix else "") +
+                f"in {self.config.aws_region}"
+            )
+
+            if failed_tables:
+                raise RuntimeError(
+                    f"Failed to clone {len(failed_tables)} table(s) " +
+                    (f"with prefix '{prefix}': {failed_tables}" if prefix else
+                     f"in {self.config.aws_region}: {failed_tables}")
+                )
+
+        except ClientError as e:
+            error_details = e.response.get("Error", {})
+            error_code = error_details.get("Code", "Unknown")
+            error_message = error_details.get("Message", str(e))
+            raise RuntimeError(
+                f"Error listing tables with prefix '{prefix}': "
+                f"{error_code} - {error_message}"
+            ) from e
+
 
 def main():
     """Main function to run the table cloner."""
@@ -498,7 +481,7 @@ def main():
     )
     parser.add_argument(
         '--all',
-        help='Clone all tables from the specified region in .env)',
+        help='Clone all tables from the region specified by AWS_REGION in .env',
         action='store_true'
     )
 
