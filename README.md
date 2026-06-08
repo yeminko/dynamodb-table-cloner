@@ -54,6 +54,14 @@ Clone DynamoDB tables from cloud to local DynamoDB with AWS SSO authentication.
 source .venv/bin/activate
 ```
 
+### Test Your Setup is Correct
+
+Run the setup test script to verify your configuration. This will check for AWS credentials, local DynamoDB connectivity, and other prerequisites:
+
+```bash
+python test_setup.py
+```
+
 ### Clone Tables
 
 Clone tables by name. This will clone both schema and data, renaming the table with the specified prefix in `.env`:

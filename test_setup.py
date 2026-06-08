@@ -192,9 +192,7 @@ def main():
 
     if passed == total:
         print("\n🎉 All checks passed! You're ready to clone tables.")
-        print("\nExample usage:")
-        print("  python table_cloner.py dev_users")
-        print("  python example_usage.py")
+        print("📖 For usage instructions, see the README.md file.\n")
     else:
         print(
             f"\n⚠️  {total - passed} check(s) failed. Please fix the issues above before proceeding.")
