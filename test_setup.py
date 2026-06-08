@@ -5,14 +5,15 @@ This script performs basic checks to ensure all components
 are properly configured and ready to use.
 """
 
-import json
 import os
 import boto3
+import botocore
 import sys
-from datetime import datetime
+import subprocess
+from dotenv import dotenv_values
 
 
-def check_file_exists(filepath, description):
+def check_file_exists(filepath, description) -> bool:
     """Check if a file exists and report status."""
     if os.path.exists(filepath):
         print(f"✅ {description}: {filepath}")
@@ -22,7 +23,7 @@ def check_file_exists(filepath, description):
         return False
 
 
-def check_env_file():
+def check_env_file() -> bool:
     """Check if .env file is valid and contains required variables."""
     if not os.path.exists('.env'):
         print("❌ .env file not found")
@@ -30,7 +31,6 @@ def check_env_file():
         return False
 
     try:
-        from dotenv import dotenv_values
         config = dotenv_values('.env')
 
         # Check required fields
@@ -64,13 +64,12 @@ def check_env_file():
         return False
 
 
-def check_local_dynamodb():
+def check_local_dynamodb() -> bool:
     """Check if local DynamoDB is running."""
     try:
         # Load endpoint from .env or use default
         endpoint = "http://localhost:8000"
         if os.path.exists('.env'):
-            from dotenv import dotenv_values
             config = dotenv_values('.env')
             endpoint = config.get('LOCAL_DYNAMODB_ENDPOINT', endpoint)
 
@@ -101,11 +100,10 @@ def check_local_dynamodb():
         return False
 
 
-def check_python_dependencies():
+def check_python_dependencies() -> bool:
     """Check if required Python packages are installed."""
     try:
-        import boto3
-        import botocore
+
         print(f"✅ boto3 version: {boto3.__version__}")
         print(f"✅ botocore version: {botocore.__version__}")
         return True
@@ -118,9 +116,8 @@ def check_python_dependencies():
         return False
 
 
-def check_package_manager():
+def check_package_manager() -> bool:
     """Check if uv or pip is available."""
-    import subprocess
 
     managers = []
 
@@ -163,6 +160,10 @@ def main():
         ("Python Dependencies", check_python_dependencies),
         ("Main Script", lambda: check_file_exists(
             'table_cloner.py', 'Main script')),
+        ("List Tables Script", lambda: check_file_exists(
+            'list_tables.py', 'List tables script')),
+        ("SSO Credentials Script", lambda: check_file_exists(
+            'get_sso_credentials.py', 'SSO credentials script')),
         ("Requirements File", lambda: check_file_exists(
             'requirements.txt', 'Requirements file')),
         ("Environment Configuration", check_env_file),
@@ -191,9 +192,7 @@ def main():
 
     if passed == total:
         print("\n🎉 All checks passed! You're ready to clone tables.")
-        print("\nExample usage:")
-        print("  python table_cloner.py dev_users")
-        print("  python example_usage.py")
+        print("📖 For usage instructions, see the README.md file.\n")
     else:
         print(
             f"\n⚠️  {total - passed} check(s) failed. Please fix the issues above before proceeding.")
